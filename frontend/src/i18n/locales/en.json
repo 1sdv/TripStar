@@ -34,7 +34,7 @@
   },
   "home": {
     "heroBadge": "AI Intelligent Itinerary Engine",
-    "titleLine": "Explore the world,unlock every possibility",
+    "titleLine": "Unlock Every Possibility",
     "heroDesc": "Tell me your destination and preferences, and AI will craft a unique travel plan for you",
     "nav": {
       "cta": "Start Planning",
@@ -45,7 +45,7 @@
     "step2": "Preferences",
     "step3": "Special Needs",
     "cityLabel": "Destination City",
-    "cityPlaceholder": "Enter a city, e.g. Hangzhou",
+    "cityPlaceholder": "Enter a city, e.g. China-Hangzhou",
     "cityRequired": "Please enter a destination city",
     "startDateLabel": "Departure Date",
     "startDatePlaceholder": "Select departure date",

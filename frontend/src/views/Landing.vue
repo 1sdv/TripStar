@@ -54,7 +54,7 @@
             <!-- <p class="landing-hero-badge text-center">{{ t('home.heroBadge') }}</p> -->
             <div class="title-brand">
               <h1 class="presentation-title">
-                TripStar
+                TRIPSTAR
               </h1>
             </div>
             <h2 class="presentation-subtitle text-center">{{ t('home.titleLine') }}</h2>
@@ -187,18 +187,20 @@
               <h3>{{ t('home.step3') }}</h3>
             </div>
             <a-form-item name="free_text_input">
-              <a-textarea
-                v-model:value="formData.free_text_input"
-                :placeholder="t('home.specialNeedsPlaceholder')"
-                :rows="4"
-                size="large"
-                class="field-textarea"
-              />
+              <div class="field-textarea">
+                <a-textarea
+                  v-model:value="formData.free_text_input"
+                  :placeholder="t('home.specialNeedsPlaceholder')"
+                  :rows="4"
+                  size="large"
+                  class="special-textarea"
+                />
+              </div>
             </a-form-item>
           </div>
 
           <a-form-item>
-            <button type="submit" class="submit-btn" :class="{ loading }" :disabled="loading">
+            <button type="submit" class="btn btn-danger btn-round submit-btn" :class="{ loading }" :disabled="loading">
               <span v-if="!loading">{{ t('home.submit') }}</span>
               <span v-else class="loading-row">
                 <i class="spinner"></i>
@@ -662,7 +664,7 @@ const handleSubmit = async () => {
 }
 
 .landing-header .content-center .container {
-  transform: translate3d(0, 28px, 0);
+  transform: translate3d(0, 45px, 0);
 }
 
 /* moving-clouds: 依赖 global.css 的定位 (bottom:0, width:250em, cloudLoop 80s) */
@@ -796,30 +798,47 @@ const handleSubmit = async () => {
 .field-input.ant-input,
 .field-input.ant-picker,
 .field-select :deep(.ant-select-selector),
-.field-textarea :deep(.ant-input) {
+.field-textarea :deep(textarea) {
   border: 1px solid rgba(236, 243, 250, 0.2) !important;
   border-radius: 12px !important;
   background: rgba(14, 27, 38, 0.66) !important;
   color: #ecf3fa !important;
 }
 
+/* 穿透 AntD textarea 包裹层，直接设置 textarea 元素样式 */
+.field-textarea :deep(textarea),
+.field-textarea :deep(.ant-input),
+.field-textarea.ant-input,
+.field-textarea.ant-input-lg {
+  background: rgba(14, 27, 38, 0.66) !important;
+  border: 1px solid rgba(236, 243, 250, 0.2) !important;
+  border-radius: 12px !important;
+  color: #ecf3fa !important;
+}
+
 .field-input.ant-input::placeholder,
 :deep(.field-input .ant-picker-input > input::placeholder),
-.field-textarea :deep(.ant-input::placeholder) {
+.field-textarea :deep(textarea::placeholder),
+.field-textarea.ant-input::placeholder {
   color: rgba(228, 236, 245, 0.4) !important;
 }
 
 .field-input.ant-input:hover,
 .field-input.ant-picker:hover,
-.field-select:hover :deep(.ant-select-selector) {
+.field-select:hover :deep(.ant-select-selector),
+.field-textarea :deep(textarea:hover),
+.field-textarea.ant-input:hover {
   border-color: rgba(236, 243, 250, 0.42) !important;
 }
 
 .field-input.ant-input:focus,
 .field-input.ant-picker-focused,
-.field-textarea :deep(.ant-input:focus) {
+.field-textarea :deep(textarea:focus),
+.field-textarea.ant-input:focus {
   border-color: rgba(215, 110, 66, 0.88) !important;
   box-shadow: 0 0 0 3px rgba(215, 110, 66, 0.2) !important;
+  background: rgba(14, 27, 38, 0.66) !important;
+  outline: none !important;
 }
 
 :deep(.field-input .ant-picker-input > input),
@@ -831,7 +850,7 @@ const handleSubmit = async () => {
 }
 
 .days-chip {
-  min-height: 46px;
+  min-height: 40px;
   border-radius: 12px;
   border: 1px solid rgba(215, 110, 66, 0.42);
   background: rgba(19, 34, 46, 0.8);
@@ -842,6 +861,7 @@ const handleSubmit = async () => {
 }
 
 .days-number {
+  color: rgba(236, 243, 250, 0.72);
   font-size: 24px;
   line-height: 1;
   font-weight: 700;
@@ -892,9 +912,9 @@ const handleSubmit = async () => {
   width: 100%;
   min-height: 52px;
   border-radius: 14px;
-  border: 1px solid rgba(236, 243, 250, 0.28);
+  /* border: 1px solid rgba(236, 243, 250, 0.28);
   background: linear-gradient(135deg, #d76e42, #a14625);
-  color: #fff;
+  color: #fff; */
   font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.08em;
