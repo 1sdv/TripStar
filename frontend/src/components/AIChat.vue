@@ -314,7 +314,7 @@ const sendChatMessage = async () => {
 
 .container-wrap.open .content-card {
   width: 1260px;
-  height: 900px;
+  height: 1100px;
 }
 
 .container-wrap.open .background-blur-balls {
