@@ -5,6 +5,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        VITE_AMAP_WEB_JS_KEY: ${VITE_AMAP_WEB_JS_KEY:-your_amap_web_js_api_key_here}
     container_name: helloagents-trip-planner
     ports:
       - "7860:7860"
@@ -13,7 +15,7 @@ services:
       - LLM_BASE_URL=${LLM_BASE_URL:-your_url}
       - LLM_MODEL_ID=${LLM_MODEL_ID:-your_model}
       - LLM_TIMEOUT=${LLM_TIMEOUT:-600}
-      - AMAP_API_KEY=${AMAP_API_KEY:-your_key}
+      - VITE_AMAP_WEB_KEY=${VITE_AMAP_WEB_KEY:-your_web_api_key_here}
       - UNSPLASH_ACCESS_KEY=${UNSPLASH_ACCESS_KEY:-your_key}
       - UNSPLASH_SECRET_KEY=${UNSPLASH_SECRET_KEY:-your_key}
       - HOST=0.0.0.0
