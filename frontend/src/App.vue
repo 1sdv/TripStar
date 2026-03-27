@@ -1,5 +1,6 @@
 <template>
   <div id="app">
+    <a-config-provider :locale="antdLocale">
     <a-layout style="min-height: 100vh">
       <!-- <a-layout-header v-if="!isLandingRoute" class="app-header">
         <div class="header-inner">
@@ -46,6 +47,7 @@
         </div>
       </a-layout-footer> -->
     </a-layout>
+    </a-config-provider>
   </div>
 </template>
 
@@ -53,17 +55,25 @@
 import { computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import dayjs from 'dayjs'
+import 'dayjs/locale/zh-cn'
+import 'dayjs/locale/ja'
 import { setAppLocale, type AppLocale } from '@/i18n'
+import { getAntdLocale, getDayjsLocaleKey } from '@/i18n/antd-locale'
 
 const { t, locale } = useI18n()
 const route = useRoute()
 const year = new Date().getFullYear()
 const isLandingRoute = computed(() => route.name === 'Landing')
 
+const antdLocale = computed(() => getAntdLocale(locale.value as AppLocale))
+
 watch(
   locale,
   (nextLocale) => {
-    setAppLocale(nextLocale as AppLocale)
+    const appLocale = nextLocale as AppLocale
+    setAppLocale(appLocale)
+    dayjs.locale(getDayjsLocaleKey(appLocale))
     document.title = t('app.title')
   },
   { immediate: true }
