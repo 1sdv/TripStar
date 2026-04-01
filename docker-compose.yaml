@@ -16,8 +16,7 @@ services:
       - LLM_MODEL_ID=${LLM_MODEL_ID:-your_model}
       - LLM_TIMEOUT=${LLM_TIMEOUT:-600}
       - VITE_AMAP_WEB_KEY=${VITE_AMAP_WEB_KEY:-your_web_api_key_here}
-      - UNSPLASH_ACCESS_KEY=${UNSPLASH_ACCESS_KEY:-your_key}
-      - UNSPLASH_SECRET_KEY=${UNSPLASH_SECRET_KEY:-your_key}
+      - XHS_COOKIE=${XHS_COOKIE:-your_xhs_cookie_here}
       - HOST=0.0.0.0
       - PORT=7860
       - LOG_LEVEL=INFO
