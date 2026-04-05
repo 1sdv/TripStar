@@ -6,6 +6,9 @@ __pycache__
 .git
 .gitignore
 .env
+backend/.env
+frontend/.env
+frontend/.env.*
 *.md
 MiroFish-main
 .vscode
