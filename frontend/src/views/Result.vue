@@ -42,21 +42,9 @@
                 {{ t('result.cancelEdit') }}
               </a-button>
 
-              <a-dropdown v-if="!editMode">
-                <template #overlay>
-                  <a-menu>
-                    <a-menu-item key="image" @click="exportAsImage">
-                      {{ t('result.exportImage') }}
-                    </a-menu-item>
-                    <a-menu-item key="pdf" @click="exportAsPDF">
-                      {{ t('result.exportPdf') }}
-                    </a-menu-item>
-                  </a-menu>
-                </template>
-                <a-button type="default">
-                  {{ t('result.exportTrip') }} <DownOutlined />
-                </a-button>
-              </a-dropdown>
+              <a-button v-if="!editMode" type="default" @click="exportAsImage">
+                {{ t('result.exportImage') }}
+              </a-button>
             </a-space>
           </div>
         </div>
@@ -572,11 +560,9 @@ import { computed, ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
-import { DownOutlined } from '@ant-design/icons-vue'
 import AMapLoader from '@amap/amap-jsapi-loader'
 import { Loader as GoogleMapsLoader } from '@googlemaps/js-api-loader'
 import html2canvas from 'html2canvas'
-import jsPDF from 'jspdf'
 import * as echarts from 'echarts'
 import Swiper from 'swiper'
 import { EffectCoverflow, Keyboard, Mousewheel } from 'swiper/modules'
@@ -1852,7 +1838,7 @@ const handleImageError = (event: Event) => {
 
 
 // ========== 构建导出用的纯净 HTML ==========
-const buildExportHTML = (): string => {
+const buildExportHTML = (mapDataUrl: string = ''): string => {
   if (!tripPlan.value) return ''
   const tp = tripPlan.value as TripPlan & {
     hotel_recommendations?: Array<{
@@ -1876,8 +1862,9 @@ const buildExportHTML = (): string => {
     day.attractions.forEach((a, ai) => {
       const photoUrl = a.image_url || attractionPhotos.value[a.name] || ''
       const durationText = t('result.export.durationLine', { duration: a.visit_duration || '—' })
+      // 图片自适应：不压缩不裁剪，保持原始比例
       const imgTag = photoUrl
-        ? `<img src="${photoUrl}" style="width:100%;height:160px;object-fit:cover;border-radius:8px;margin-bottom:8px;" crossorigin="anonymous" />`
+        ? `<img src="${photoUrl}" style="width:100%;height:auto;max-height:400px;object-fit:contain;border-radius:8px;margin-bottom:8px;" crossorigin="anonymous" />`
         : `<div style="width:100%;height:80px;background:linear-gradient(135deg,#667eea,#764ba2);border-radius:8px;margin-bottom:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:bold;">${a.name}</div>`
       attractionsHTML += `
         <div style="flex:0 0 48%;background:#fff;border-radius:10px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.07);margin-bottom:14px;">
@@ -1934,6 +1921,16 @@ const buildExportHTML = (): string => {
           <span style="font-size:16px;">${t('result.budget.total')}</span>
           <span style="font-size:26px;font-weight:bold;">¥${b.total || 0}</span>
         </div>
+      </div>`
+  }
+
+  // 地图截图 HTML
+  let mapHTML = ''
+  if (mapDataUrl) {
+    mapHTML = `
+      <div style="background:#ffffff;border-radius:14px;padding:20px;margin-bottom:18px;box-shadow:0 2px 10px rgba(0,0,0,0.06);">
+        <h3 style="margin:0 0 14px;color:#667eea;">${t('result.side.map')}</h3>
+        <img src="${mapDataUrl}" style="width:100%;height:auto;border-radius:10px;" />
       </div>`
   }
 
@@ -1997,6 +1994,16 @@ const buildExportHTML = (): string => {
       </div>`
   }
 
+  // 底部二维码 — 项目开源地址
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent('https://github.com/1sdv/TripStar')}`
+  const footerHTML = `
+    <div style="text-align:center;padding:24px 16px 16px;border-top:1px solid #e8e8e8;margin-top:8px;">
+      <img src="${qrUrl}" style="width:120px;height:120px;margin-bottom:10px;" crossorigin="anonymous" />
+      <div style="font-size:13px;color:#667eea;font-weight:600;margin-bottom:4px;">TripStar</div>
+      <div style="font-size:11px;color:#aaa;">https://github.com/1sdv/TripStar</div>
+      <div style="font-size:11px;color:#bbb;margin-top:6px;">${t('result.export.footer')}</div>
+    </div>`
+
   return `
     <div style="width:800px;padding:30px;background:#f0f2f5;font-family:'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;color:#333;">
       <div style="text-align:center;margin-bottom:24px;">
@@ -2009,11 +2016,67 @@ const buildExportHTML = (): string => {
         ${tp.overall_suggestions ? `<p style="margin:8px auto 0;max-width:600px;font-size:13px;color:#666;line-height:1.6;">${tp.overall_suggestions}</p>` : ''}
       </div>
       ${budgetHTML}
+      ${mapHTML}
       ${daysHTML}
       ${hotelHTML}
       ${weatherHTML}
-      <div style="text-align:center;padding:16px;color:#aaa;font-size:12px;">${t('result.export.footer')}</div>
+      ${footerHTML}
     </div>`
+}
+
+// ========== 捕获地图截图 ==========
+const captureMapScreenshot = async (): Promise<string> => {
+  try {
+    // 根据当前地图供应商选择对应的 DOM 容器
+    const containerId = mapProviderType.value === 'google' ? 'google-map-container' : 'amap-container'
+    const mapEl = document.getElementById(containerId)
+    if (!mapEl || mapEl.clientHeight === 0) {
+      console.warn('⚠️ 地图容器不可见或未初始化，跳过地图截图')
+      return ''
+    }
+
+    // 临时将地图容器显示出来以便截图（可能被 v-show 隐藏）
+    const parentCard = document.querySelector('.right-map') as HTMLElement | null
+    const wasHidden = parentCard && parentCard.style.display === 'none'
+    if (parentCard && wasHidden) {
+      parentCard.style.display = 'block'
+      parentCard.style.position = 'absolute'
+      parentCard.style.left = '-9999px'
+    }
+
+    // 等待一帧让渲染生效
+    await new Promise(resolve => setTimeout(resolve, 300))
+
+    const mapCanvas = await html2canvas(mapEl, {
+      backgroundColor: '#1a1a2e',
+      scale: 2,
+      logging: false,
+      useCORS: true,
+      allowTaint: true,
+      ignoreElements: (element) => {
+        // 忽略地图控制组件（比如 Google 的 +- 缩放按钮、高德控制条）
+        // html2canvas 对地图原生 SVG UI 的渲染支持极差，容易出现白底色块
+        if (element && element.className && typeof element.className === 'string') {
+          if (element.className.includes('gmnoprint') || element.className.includes('amap-controls')) {
+            return true
+          }
+        }
+        return false
+      }
+    })
+
+    // 还原隐藏状态
+    if (parentCard && wasHidden) {
+      parentCard.style.display = 'none'
+      parentCard.style.position = ''
+      parentCard.style.left = ''
+    }
+
+    return mapCanvas.toDataURL('image/png')
+  } catch (err) {
+    console.warn('⚠️ 地图截图失败，导出将不包含地图:', err)
+    return ''
+  }
 }
 
 // 导出为图片
@@ -2021,11 +2084,28 @@ const exportAsImage = async () => {
   try {
     message.loading({ content: t('result.messages.generatingImage'), key: 'export', duration: 0 })
 
+    // 1. 先捕获地图截图
+    const mapDataUrl = await captureMapScreenshot()
+
+    // 2. 构建包含地图的完整导出 HTML
     const exportContainer = document.createElement('div')
-    exportContainer.innerHTML = buildExportHTML()
+    exportContainer.innerHTML = buildExportHTML(mapDataUrl)
     exportContainer.style.position = 'absolute'
     exportContainer.style.left = '-9999px'
     document.body.appendChild(exportContainer)
+
+    // 3. 等待二维码等外部图片加载完成
+    const images = exportContainer.querySelectorAll('img')
+    await Promise.all(
+      Array.from(images).map(img =>
+        img.complete
+          ? Promise.resolve()
+          : new Promise(resolve => {
+              img.onload = resolve
+              img.onerror = resolve
+            })
+      )
+    )
 
     const canvas = await html2canvas(exportContainer, {
       backgroundColor: '#f0f2f5',
@@ -2046,59 +2126,6 @@ const exportAsImage = async () => {
   } catch (error: any) {
     console.error('导出图片失败:', error)
     message.error({ content: t('result.messages.imageFailed', { error: error.message }), key: 'export' })
-  }
-}
-
-// 导出为PDF
-const exportAsPDF = async () => {
-  try {
-    message.loading({ content: t('result.messages.generatingPdf'), key: 'export', duration: 0 })
-
-    const exportContainer = document.createElement('div')
-    exportContainer.innerHTML = buildExportHTML()
-    exportContainer.style.position = 'absolute'
-    exportContainer.style.left = '-9999px'
-    document.body.appendChild(exportContainer)
-
-    const canvas = await html2canvas(exportContainer, {
-      backgroundColor: '#f0f2f5',
-      scale: 2,
-      logging: false,
-      useCORS: true,
-      allowTaint: true
-    })
-
-    document.body.removeChild(exportContainer)
-
-    const imgData = canvas.toDataURL('image/png')
-    const pdf = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4'
-    })
-
-    const imgWidth = 210
-    const imgHeight = (canvas.height * imgWidth) / canvas.width
-
-    let heightLeft = imgHeight
-    let position = 0
-
-    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
-    heightLeft -= 297
-
-    while (heightLeft > 0) {
-      position = heightLeft - imgHeight
-      pdf.addPage()
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
-      heightLeft -= 297
-    }
-
-    pdf.save(`${t('result.export.filePrefix')}_${tripPlan.value?.city}_${new Date().getTime()}.pdf`)
-
-    message.success({ content: t('result.messages.pdfSuccess'), key: 'export' })
-  } catch (error: any) {
-    console.error('导出PDF失败:', error)
-    message.error({ content: t('result.messages.pdfFailed', { error: error.message }), key: 'export' })
   }
 }
 // ========== 知识图谱初始化 ==========
@@ -2753,7 +2780,11 @@ const initAMap = async () => {
       zoom: 12,
       center: [116.397128, 39.916527], // 默认中心点(北京)
       viewMode: '3D',
-      mapStyle: 'amap://styles/darkblue'
+      mapStyle: 'amap://styles/darkblue',
+      // 开启 preserveDrawingBuffer 才能让 html2canvas 在 WebGL 下截屏成功！
+      WebGLParams: {
+        preserveDrawingBuffer: true
+      }
     })
 
     // 添加景点标记
