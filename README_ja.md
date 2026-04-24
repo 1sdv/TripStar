@@ -50,7 +50,7 @@
 
 * Python 3.10+
 * Node.js 18+
-* 大規模言語モデル API キー（OpenAIと互換性のあるものを推奨。Doubao など）
+* 大規模言語モデル API キー（OpenAIと互換性のあるものを推奨。Doubao、[MiniMax-M2.7](https://platform.minimax.io/docs/api-reference/text-openai-api) など）
 * 高徳マップ (AMap) のキー（Web Service または Web JS API。`index.html` にセキュリティJSCodeの設定が必要）または Google Maps API のキー。Google Mapsを使用する場合、Google Cloudコンソールで **Geocoding API, Places API (New), Directions API, Maps JavaScript API, Weather API** を必ず有効にし、有効な課金アカウント（クレジットカード）をリンクする必要があります。
 * Xiaohongshu の Cookie（ブラウザにログイン後、DevToolsで取得）
 * `uv` パッケージマネージャーのインストール
