@@ -165,7 +165,7 @@ sequenceDiagram
 
 * Python 3.10+
 * Node.js 18+
-* 大模型 API Key（推荐使用兼容 OpenAI 格式的服务商，如豆包）
+* 大模型 API Key（推荐使用兼容 OpenAI 格式的服务商，如豆包、[MiniMax-M2.7](https://platform.minimax.io/docs/api-reference/text-openai-api)）
 * 高德地图两种key： Web服务 、 Web端(JS API) (其**安全密钥 JSCode**配置在index.html中)（[高德api](https://lbs.amap.com/)）
 * [Google Maps API Key](https://developers.google.com/maps/apis-by-platform)（若要使用 Google 地图引擎，必须在 Google Cloud 控制台中开通：**Geocoding API, Places API (New), Directions API, Maps JavaScript API, Weather API**，需要绑卡）
 * 小红书Cookie（[小红书](https://www.xiaohongshu.com/) 网页端登录后从浏览器开发者工具复制）
