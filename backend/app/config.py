@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     google_maps_api_key: str = ""
     google_maps_proxy: str = ""
 
+    # You.com API配置 (可选, 用于联网搜索/深度研究工具)
+    youcom_api_key: str = ""
+
     # 小红书配置
     xhs_cookie: str = ""
 
@@ -79,6 +82,7 @@ _RUNTIME_SETTING_KEYS = {
     "vite_amap_web_js_key",
     "google_maps_api_key",
     "google_maps_proxy",
+    "youcom_api_key",
     "xhs_cookie",
     "openai_api_key",
     "openai_base_url",
@@ -144,6 +148,7 @@ def get_runtime_settings() -> Dict[str, str]:
         "vite_amap_web_js_key": settings.vite_amap_web_js_key or "",
         "google_maps_api_key": settings.google_maps_api_key or "",
         "google_maps_proxy": settings.google_maps_proxy or "",
+        "youcom_api_key": settings.youcom_api_key or "",
         "xhs_cookie": settings.xhs_cookie or "",
         "openai_api_key": settings.openai_api_key or "",
         "openai_base_url": settings.openai_base_url or "",
@@ -197,6 +202,7 @@ def print_config():
     print(f"高德地图JS Key: {'已配置' if settings.vite_amap_web_js_key else '未配置'}")
     print(f"Google Maps API Key: {'已配置' if settings.google_maps_api_key else '未配置'}")
     print(f"Google Maps Proxy: {settings.google_maps_proxy or '未配置'}")
+    print(f"You.com API Key: {'已配置' if settings.youcom_api_key else '未配置'}")
     print(f"小红书Cookie: {'已配置' if settings.xhs_cookie else '未配置'}")
 
     # 检查LLM配置
