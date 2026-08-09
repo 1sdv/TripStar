@@ -9,9 +9,13 @@ import re
 import math
 import random
 import logging
+import threading
+import time
 import requests
 import httpx
-from typing import List, Dict, Any
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
+from typing import List, Dict, Any, Optional
 from ..config import get_settings
 from .llm_service import get_llm
 from .xhs_sign.sign_util import generate_request_params, splice_str, generate_x_b3_traceid, trans_cookies
@@ -21,6 +25,15 @@ logger = logging.getLogger(__name__)
 
 class XHSCookieExpiredError(Exception):
     """小红书 Cookie 过期致命异常，用于向前端报警"""
+    pass
+
+
+class XHSFetchError(Exception):
+    """小红书抓取失败（网络超时、响应异常等非鉴权原因）。
+
+    与 XHSCookieExpiredError 区分开，避免把网络问题误报成 Cookie 失效，
+    让用户白白去重新抓取一个本来有效的 Cookie。
+    """
     pass
 
 
@@ -105,7 +118,7 @@ class XhsNativeClient:
             "page": page,
             "page_size": page_size,
             "search_id": generate_x_b3_traceid(21),
-            "sort": "general",
+            "sort": sort,
             "note_type": 0,
             "ext_flags": [],
             "filters": [
@@ -200,31 +213,38 @@ def get_xhs_client() -> XhsNativeClient:
 
 # ============ 高德地理编码 ============
 
-def _geocode_amap_raw(address: str, city: str) -> dict:
+def _geocode_amap_raw(address: str, city: str) -> Optional[dict]:
     """纯高德 Web 服务地理编码（供 map_dispatcher 降级调用）。
 
-    返回: {"longitude": float, "latitude": float}
+    返回: {"longitude": float, "latitude": float}，失败时返回 None。
+    注意: 失败时绝不能返回某个固定坐标兜底 —— 那会把景点静默标到错误的城市。
     """
     settings = get_settings()
     if not settings.vite_amap_web_key:
-        return {"longitude": 116.397128, "latitude": 39.916527}  # 默认兜底
+        return None
 
-    url = f"https://restapi.amap.com/v3/place/text?keywords={address}&city={city}&offset=1&key={settings.vite_amap_web_key}"
+    # 景点名可能包含 & # 等字符，必须交给 httpx 做参数编码，不能拼进 URL
+    params = {
+        "keywords": address,
+        "city": city,
+        "offset": 1,
+        "key": settings.vite_amap_web_key,
+    }
     try:
-        resp = httpx.get(url, timeout=5)
+        resp = httpx.get("https://restapi.amap.com/v3/place/text", params=params, timeout=5)
         data = resp.json()
-        if data.get("status") == "1" and data.get("pois") and len(data["pois"]) > 0:
+        if data.get("status") == "1" and data.get("pois"):
             location = data["pois"][0]["location"]
             lon, lat = location.split(",")
             return {"longitude": float(lon), "latitude": float(lat)}
+        print(f"高德地理编码无结果 ({address}): status={data.get('status')} info={data.get('info')}")
     except Exception as e:
         print(f"高德地理编码查阅失败 ({address}): {e}")
 
-    # 获取失败时给个默认兜底
-    return {"longitude": 116.397128, "latitude": 39.916527}
+    return None
 
 
-def geocode_amap(address: str, city: str, *, name_zh: str = "", name_en: str = "") -> dict:
+def geocode_amap(address: str, city: str, *, name_zh: str = "", name_en: str = "") -> Optional[dict]:
     """统一地理编码入口 — 自动路由到 Google / 高德。
 
     内部通过 map_dispatcher 判断当前活跃供应商，
@@ -307,11 +327,12 @@ def search_xhs_attractions(city: str, keywords: str, language: str = "zh") -> st
 
     except XHSCookieExpiredError:
         raise
+    except (requests.Timeout, requests.ConnectionError) as e:
+        print(f"❌ 小红书网络请求失败: {e}")
+        raise XHSFetchError(f"访问小红书超时或网络不可达，请检查网络/代理后重试: {e}") from e
     except Exception as e:
-        print(f"❌ 小红书接口抓取崩盘: {e}")
-        raise XHSCookieExpiredError(
-            f"小红书访问超时或 Cookie 失效(风控拦截)，抓取失败。请更新 XHS_COOKIE"
-        )
+        print(f"❌ 小红书接口抓取失败: {e}")
+        raise XHSFetchError(f"小红书数据抓取失败: {e}") from e
 
     if not combined_text:
         return f"未在小红书检索到关于 {city} {keywords} 的内容。"
@@ -377,16 +398,31 @@ JSON 返回示例:
         else:
             extracted = json.loads(content)
 
+        valid_items = [item for item in extracted if item.get("name")]
+
+        # 逐个串行编码时 N 个景点最坏要等 N×5s，这里用小并发池压平等待
+        def _resolve_location(item: dict) -> Optional[dict]:
+            name = item["name"]
+            try:
+                return geocode_amap(
+                    name,
+                    city,
+                    name_zh=item.get("name_zh", name),
+                    name_en=item.get("name_en", name),
+                )
+            except Exception as geo_err:
+                print(f"地理编码异常 ({name}): {geo_err}")
+                return None
+
+        locations: List[Optional[dict]] = []
+        if valid_items:
+            with ThreadPoolExecutor(max_workers=min(5, len(valid_items))) as pool:
+                locations = list(pool.map(_resolve_location, valid_items))
+
         final_result = f"这是小红书热门精选游记的提取结果，附带确切坐标（图片由前端单独搜索获取）：\n"
-        for item in extracted:
-            name = item.get("name", "")
-            if not name:
-                continue
-            # 获取中英文名称，用于精准地理编码（Google用英文，高德用中文）
-            name_zh = item.get("name_zh", name)
-            name_en = item.get("name_en", name)
-            loc = geocode_amap(name, city, name_zh=name_zh, name_en=name_en)
-            item["location"] = loc
+        for item, loc in zip(valid_items, locations):
+            if loc:
+                item["location"] = loc
             final_result += json.dumps(item, ensure_ascii=False) + "\n"
 
         print(f"✅ [XHS_SERVICE] 小红书数据挖掘完毕，已装载进上下文。")
@@ -399,7 +435,50 @@ JSON 返回示例:
 
 # ============ 景点搜图 ============
 
+# 前端会为每个景点各调一次 /api/poi/photo，每次都要打两回小红书接口。
+# 加一层进程内缓存，既能显著降低出图延迟，也能减少 Cookie 被风控的概率。
+_PHOTO_CACHE_MAXSIZE = 512
+_PHOTO_CACHE_TTL_SECONDS = 6 * 3600
+_PHOTO_CACHE_MISS_TTL_SECONDS = 600  # 没搜到图时短时间内不重复抓
+_photo_cache: "OrderedDict[str, tuple[str, float]]" = OrderedDict()
+_photo_cache_lock = threading.Lock()
+
+
+def _photo_cache_get(keyword: str) -> Optional[str]:
+    """读取缓存；命中过期条目时顺手清理。"""
+    with _photo_cache_lock:
+        entry = _photo_cache.get(keyword)
+        if entry is None:
+            return None
+        url, expires_at = entry
+        if time.monotonic() >= expires_at:
+            del _photo_cache[keyword]
+            return None
+        _photo_cache.move_to_end(keyword)
+        return url
+
+
+def _photo_cache_put(keyword: str, url: str) -> None:
+    ttl = _PHOTO_CACHE_TTL_SECONDS if url else _PHOTO_CACHE_MISS_TTL_SECONDS
+    with _photo_cache_lock:
+        _photo_cache[keyword] = (url, time.monotonic() + ttl)
+        _photo_cache.move_to_end(keyword)
+        while len(_photo_cache) > _PHOTO_CACHE_MAXSIZE:
+            _photo_cache.popitem(last=False)
+
+
 def get_xhs_photo_sync(keyword: str) -> str:
+    """带缓存的景点图片查询入口。"""
+    cached = _photo_cache_get(keyword)
+    if cached is not None:
+        return cached
+
+    url = _fetch_xhs_photo(keyword)
+    _photo_cache_put(keyword, url)
+    return url
+
+
+def _fetch_xhs_photo(keyword: str) -> str:
     """根据关键词从小红书搜索一张首图URL
 
     使用原生签名客户端搜索最新帖子，然后通过原生 API 或 SSR 抓取首张图片。
@@ -408,7 +487,7 @@ def get_xhs_photo_sync(keyword: str) -> str:
         client = get_xhs_client()
 
         # 搜图时强制按"最新"排序，避开综合高赞的含文字攻略图
-        res_json = client.search_notes(keyword=keyword, sort_type=0)
+        res_json = client.search_notes(keyword=keyword, sort_type=1)
         items = res_json.get("data", {}).get("items", [])
 
         target_note_id = None

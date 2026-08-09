@@ -10,8 +10,9 @@ if hasattr(sys.stdout, 'reconfigure'):
 if hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
+from contextlib import asynccontextmanager
 from pathlib import Path
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -21,13 +22,46 @@ from .routes import trip, poi, map as map_routes, chat, settings as settings_rou
 # 获取配置
 settings = get_settings()
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """应用生命周期：启动时打印并校验配置，关闭时输出提示。"""
+    print("\n" + "="*60)
+    print(f"🚀 {settings.app_name} v{settings.app_version}")
+    print("="*60)
+
+    # 打印配置信息
+    print_config()
+
+    # 验证配置
+    try:
+        validate_config()
+        print("\n✅ 配置验证通过")
+    except ValueError as e:
+        print(f"\n❌ 配置验证失败:\n{e}")
+        print("\n请检查环境变量配置；本地开发可通过 .env 提供，Docker 部署请通过容器环境变量提供")
+        raise
+
+    print("\n" + "="*60)
+    print(f"📚 API文档: http://localhost:{settings.port}/docs")
+    print(f"📖 ReDoc文档: http://localhost:{settings.port}/redoc")
+    print("="*60 + "\n")
+
+    yield
+
+    print("\n" + "="*60)
+    print("👋 应用正在关闭...")
+    print("="*60 + "\n")
+
+
 # 创建FastAPI应用
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description="基于HelloAgents框架的智能旅行规划助手API",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    lifespan=lifespan
 )
 
 @app.middleware("http")
@@ -58,39 +92,6 @@ app.include_router(poi.router, prefix="/api")
 app.include_router(map_routes.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 app.include_router(settings_routes.router, prefix="/api")
-
-
-@app.on_event("startup")
-async def startup_event():
-    """应用启动事件"""
-    print("\n" + "="*60)
-    print(f"🚀 {settings.app_name} v{settings.app_version}")
-    print("="*60)
-    
-    # 打印配置信息
-    print_config()
-    
-    # 验证配置
-    try:
-        validate_config()
-        print("\n✅ 配置验证通过")
-    except ValueError as e:
-        print(f"\n❌ 配置验证失败:\n{e}")
-        print("\n请检查环境变量配置；本地开发可通过 .env 提供，Docker 部署请通过容器环境变量提供")
-        raise
-    
-    print("\n" + "="*60)
-    print("📚 API文档: http://localhost:8000/docs")
-    print("📖 ReDoc文档: http://localhost:8000/redoc")
-    print("="*60 + "\n")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """应用关闭事件"""
-    print("\n" + "="*60)
-    print("👋 应用正在关闭...")
-    print("="*60 + "\n")
 
 
 @app.get("/")
@@ -126,13 +127,21 @@ if _frontend_dist.exists():
     if _assets_dir.exists():
         app.mount("/assets", StaticFiles(directory=str(_assets_dir)), name="assets")
     # SPA catch-all: 未匹配的前端路由一律返回 index.html
+    _dist_root = _frontend_dist.resolve()
+
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         """SPA 前端路由 fallback"""
-        file_path = _frontend_dist / full_path
-        if file_path.exists() and file_path.is_file():
-            return FileResponse(str(file_path))
-        return FileResponse(str(_frontend_dist / "index.html"))
+        # 未匹配到任何后端路由的 /api 请求应当是 404，而不是静默返回前端页面
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+
+        # full_path 来自 URL，可能包含 ".." 等穿越片段（ASGI 服务器不会归一化），
+        # 必须确认解析后的真实路径仍在 dist 目录内才允许读取。
+        candidate = (_dist_root / full_path).resolve()
+        if candidate.is_file() and candidate.is_relative_to(_dist_root):
+            return FileResponse(str(candidate))
+        return FileResponse(str(_dist_root / "index.html"))
 
 
 if __name__ == "__main__":

@@ -416,6 +416,29 @@ class MultiAgentTripPlanner:
         except Exception as e:
             return f"高德天气降级 HTTP 请求失败: {e}"
     
+    async def _fetch_weather(self, city: str, lang_hint: str) -> str:
+        """查询单个城市天气，必要时降级到高德天气 REST 接口。"""
+        weather_query = f"请查询{city}的天气信息{lang_hint}"
+        weather_response = await asyncio.to_thread(self.weather_agent.run, weather_query)
+        print(f"🌤️  {city} 天气查询结果: {weather_response[:150]}...")
+
+        _weather_fail_keywords = ("无法", "失败", "错误", "error", "unknown", "抱歉", "sorry")
+        if self.map_provider == "google" and any(kw in weather_response.lower() for kw in _weather_fail_keywords):
+            print(f"  ⚠️ {city} Google 天气查询失败，降级到高德天气 API...")
+            try:
+                weather_response = await self._fallback_amap_weather(city)
+                print(f"  ✅ {city} 高德天气降级成功: {weather_response[:150]}...")
+            except Exception as _wb_err:
+                print(f"  ❌ {city} 高德天气降级也失败: {_wb_err}")
+        return weather_response
+
+    async def _fetch_hotels(self, city: str, accommodation: str, lang_hint: str) -> str:
+        """搜索单个城市的酒店。"""
+        hotel_query = f"请搜索{city}的{accommodation}酒店{lang_hint}"
+        hotel_response = await asyncio.to_thread(self.hotel_agent.run, hotel_query)
+        print(f"🏨 {city} 酒店搜索结果: {hotel_response[:150]}...")
+        return hotel_response
+
     async def plan_trip(
         self,
         request: TripRequest,
@@ -453,6 +476,8 @@ class MultiAgentTripPlanner:
             _lang_hint = "" if _lang == "zh" else f" Please respond in {'English' if _lang == 'en' else _lang}."
 
             # ========== 按城市逐一搜集信息 ==========
+            # 城市之间保持串行：weather_agent / hotel_agent 是共享单例，
+            # 并行多个城市会并发复用同一个 Agent 对象。
             all_attractions: Dict[str, str] = {}
             all_weather: Dict[str, str] = {}
             all_hotels: Dict[str, str] = {}
@@ -461,55 +486,41 @@ class MultiAgentTripPlanner:
                 city = city_stay.city
                 # 计算当前城市对应的进度区间: 10 ~ 75 之间按城市均分
                 progress_base = int(10 + (idx / total_cities) * 65)
-                progress_step = max(int(65 / total_cities / 3), 3)
                 city_label = f" ({idx+1}/{total_cities})" if total_cities > 1 else ""
 
-                # [1] 景点搜索
-                print(f"  [{idx+1}/{total_cities}] 正在搜索 {city} 的景点...")
+                print(f"  [{idx+1}/{total_cities}] 并发搜集 {city} 的景点/天气/酒店...")
                 await self._emit_progress(
-                    progress_callback, "attraction_search",
-                    f"正在搜索 {city} 的景点...{city_label}",
+                    progress_callback, "city_search",
+                    f"正在搜集 {city} 的景点、天气与酒店...{city_label}",
                     progress_base
                 )
-                attraction_response = await asyncio.to_thread(
-                    search_xhs_attractions, city, keywords, _lang
-                )
-                all_attractions[city] = attraction_response
-                print(f"📍 {city} 景点搜索结果: {attraction_response[:150]}...")
 
-                # [2] 天气查询
-                print(f"  [{idx+1}/{total_cities}] 正在查询 {city} 的天气...")
-                await self._emit_progress(
-                    progress_callback, "weather_search",
-                    f"正在查询 {city} 的天气...{city_label}",
-                    progress_base + progress_step
+                # 三路信息互不依赖，并发执行以省去两次串行等待
+                attraction_result, weather_result, hotel_result = await asyncio.gather(
+                    asyncio.to_thread(search_xhs_attractions, city, keywords, _lang),
+                    self._fetch_weather(city, _lang_hint),
+                    self._fetch_hotels(city, request.accommodation, _lang_hint),
+                    return_exceptions=True,
                 )
-                weather_query = f"请查询{city}的天气信息{_lang_hint}"
-                weather_response = await asyncio.to_thread(self.weather_agent.run, weather_query)
-                print(f"🌤️  {city} 天气查询结果: {weather_response[:150]}...")
 
-                # Google 天气降级
-                _weather_fail_keywords = ("无法", "失败", "错误", "error", "unknown", "抱歉", "sorry")
-                if self.map_provider == "google" and any(kw in weather_response.lower() for kw in _weather_fail_keywords):
-                    print(f"  ⚠️ {city} Google 天气查询失败，降级到高德天气 API...")
-                    try:
-                        weather_response = await self._fallback_amap_weather(city)
-                        print(f"  ✅ {city} 高德天气降级成功: {weather_response[:150]}...")
-                    except Exception as _wb_err:
-                        print(f"  ❌ {city} 高德天气降级也失败: {_wb_err}")
-                all_weather[city] = weather_response
+                # 景点是整份计划的核心数据，失败必须中止
+                if isinstance(attraction_result, BaseException):
+                    raise attraction_result
+                all_attractions[city] = attraction_result
+                print(f"📍 {city} 景点搜索结果: {attraction_result[:150]}...")
 
-                # [3] 酒店搜索
-                print(f"  [{idx+1}/{total_cities}] 正在搜索 {city} 的酒店...")
-                await self._emit_progress(
-                    progress_callback, "hotel_search",
-                    f"正在搜索 {city} 的酒店...{city_label}",
-                    progress_base + progress_step * 2
-                )
-                hotel_query = f"请搜索{city}的{request.accommodation}酒店{_lang_hint}"
-                hotel_response = await asyncio.to_thread(self.hotel_agent.run, hotel_query)
-                all_hotels[city] = hotel_response
-                print(f"🏨 {city} 酒店搜索结果: {hotel_response[:150]}...")
+                # 天气/酒店缺失不致命：Planner 提示词已要求用保守通用建议补齐
+                if isinstance(weather_result, BaseException):
+                    print(f"  ⚠️ {city} 天气查询失败，将由 Planner 兜底: {weather_result}")
+                    all_weather[city] = "天气信息暂不可用"
+                else:
+                    all_weather[city] = weather_result
+
+                if isinstance(hotel_result, BaseException):
+                    print(f"  ⚠️ {city} 酒店搜索失败，将由 Planner 兜底: {hotel_result}")
+                    all_hotels[city] = "酒店信息暂不可用"
+                else:
+                    all_hotels[city] = hotel_result
 
             print(f"\n✅ 全部 {total_cities} 个城市基础信息搜集完成\n")
 

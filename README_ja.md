@@ -52,7 +52,7 @@
 * Python 3.10+
 * Node.js 18+
 * 大規模言語モデル API キー（OpenAIと互換性のあるものを推奨。Doubao など）
-* 高徳マップ (AMap) のキー（Web Service または Web JS API。`index.html` にセキュリティJSCodeの設定が必要）または Google Maps API のキー。Google Mapsを使用する場合、Google Cloudコンソールで **Geocoding API, Places API (New), Directions API, Maps JavaScript API, Weather API** を必ず有効にし、有効な課金アカウント（クレジットカード）をリンクする必要があります。
+* 高徳マップ (AMap) のキー（Web Service または Web JS API。JS API キーと対になるセキュリティ JSCode は環境変数 `VITE_AMAP_SECURITY_JS_CODE` で設定します）または Google Maps API のキー。Google Mapsを使用する場合、Google Cloudコンソールで **Geocoding API, Places API (New), Directions API, Maps JavaScript API, Weather API** を必ず有効にし、有効な課金アカウント（クレジットカード）をリンクする必要があります。
 * Xiaohongshu の Cookie（ブラウザにログイン後、DevToolsで取得）
 * `uv` パッケージマネージャーのインストール
 
@@ -62,7 +62,7 @@ docker-compose を介してプロジェクト（フロントエンドおよび�
 
 * コンテナーの起動時にバックエンドは `backend/.env` を読み取りません。構成は常に環境変数で渡してください。
 * `docker-compose.yaml` は本番プロキシや API キーの設定（例：`GOOGLE_MAPS_API_KEY`、`GOOGLE_MAPS_PROXY` の引き渡し）をサポートします。
-* フロントエンドのビルド時変数 `VITE_AMAP_WEB_JS_KEY` は `build.args` 経由で注入されます。
+* フロントエンドのビルド時変数 `VITE_AMAP_WEB_JS_KEY` と `VITE_AMAP_SECURITY_JS_CODE` は `build.args` 経由で注入されます。
 
 **ワンストップの起動コマンド:**
 ```bash
@@ -117,7 +117,8 @@ npm install
 cp .env.example .env
 # [必須] VITE_AMAP_WEB_KEY
 # [必須] VITE_AMAP_WEB_JS_KEY
-# フロントエンド用に `index.html` へ 高徳Security JSCodeの注入が必要なことに注意
+# [必須] VITE_AMAP_SECURITY_JS_CODE — AMap JS API 2.0 が要求するセキュリティキー。
+#        未設定の場合、AMap はルート検索プラグインを拒否し、ルートは直線に退化します。
 
 # Viteサーバーの起動
 npm run dev

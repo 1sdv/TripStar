@@ -57,9 +57,17 @@ def _get_llm_runtime_config() -> Dict[str, Any]:
     }
 
 
+# 上下文体积上限：行程 JSON 与历史对话都不能无限增长，否则每次提问的 token 成本失控
+_MAX_CONTEXT_CHARS = 12000
+_MAX_HISTORY_MESSAGES = 10
+
+
 def _build_context_message(trip_plan_dict: Dict[str, Any]) -> str:
     """将旅行计划转化为上下文文本"""
-    return f"【当前旅行计划】\n```json\n{json.dumps(trip_plan_dict, ensure_ascii=False, indent=2)}\n```"
+    plan_json = json.dumps(trip_plan_dict, ensure_ascii=False, indent=2)
+    if len(plan_json) > _MAX_CONTEXT_CHARS:
+        plan_json = plan_json[:_MAX_CONTEXT_CHARS] + "\n...(行程数据过长，已截断)"
+    return f"【当前旅行计划】\n```json\n{plan_json}\n```"
 
 
 async def chat_with_trip_context(
@@ -88,9 +96,9 @@ async def chat_with_trip_context(
         {"role": "user", "content": _build_context_message(trip_plan_dict)},
     ]
 
-    # 追加历史对话
+    # 追加历史对话（只保留最近若干轮，避免上下文无限增长）
     if history:
-        for item in history:
+        for item in history[-_MAX_HISTORY_MESSAGES:]:
             messages.append({
                 "role": item.get("role", "user"),
                 "content": item.get("content", ""),

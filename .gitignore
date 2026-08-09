@@ -1,2 +1,6 @@
 backend/runtime_settings.json
 backend/data/trip_tasks
+
+# 操作系统
+.DS_Store
+Thumbs.db

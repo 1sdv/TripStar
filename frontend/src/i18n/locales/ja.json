@@ -260,7 +260,8 @@
       "pdfSuccess": "PDF のエクスポートに成功しました!",
       "pdfFailed": "PDF のエクスポートに失敗しました: {error}",
       "mapLoaded": "地図の読み込みに成功しました",
-      "mapLoadFailed": "地図の読み込みに失敗しました"
+      "mapLoadFailed": "地図の読み込みに失敗しました",
+      "amapJsKeyMissing": "先に設定で AMap JS API キーを構成してください"
     },
     "graph": {
       "type": "種類",
@@ -301,6 +302,10 @@
     "imageLoadFailed": "画像の読み込みに失敗しました",
     "mapInfo": {
       "dayAttraction": "{day} 日目 スポット {index}"
-    }
+    },
+    "moveUp": "上へ",
+    "moveDown": "下へ",
+    "backToTop": "トップ",
+    "reservationBadge": "📋 事前予約が必要"
   }
 }

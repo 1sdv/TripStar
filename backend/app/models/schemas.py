@@ -16,7 +16,7 @@ class CityStay(BaseModel):
 class TripRequest(BaseModel):
     """旅行规划请求"""
     city: str = Field(default="", description="目的地城市(单城市兼容)", example="北京")
-    cities: List[CityStay] = Field(default=[], description="多城市行程配置")
+    cities: List[CityStay] = Field(default=[], description="多城市行程配置", max_length=10)
     start_date: str = Field(..., description="开始日期 YYYY-MM-DD", example="2025-06-01")
     end_date: str = Field(..., description="结束日期 YYYY-MM-DD", example="2025-06-03")
     travel_days: int = Field(..., description="旅行天数", ge=1, le=30, example=3)
@@ -33,6 +33,15 @@ class TripRequest(BaseModel):
             self.cities = [CityStay(city=self.city, days=self.travel_days)]
         if self.cities and not self.city:
             self.city = self.cities[0].city
+        # 显式给出城市列表时，以各城市停留天数之和为准，
+        # 否则行程长度、日期区间和逐日安排会互相矛盾。
+        if self.cities:
+            total_days = sum(cs.days for cs in self.cities)
+            # 这里绕过了 travel_days 字段自身的 le=30 校验，必须手动兜住上限，
+            # 否则 10 个城市 × 15 天会展开成 150 天的行程和巨量模型调用。
+            if total_days > 30:
+                raise ValueError(f"各城市停留天数之和为 {total_days} 天，超过单次行程上限 30 天")
+            self.travel_days = total_days
         return self
 
     class Config:

@@ -26,6 +26,9 @@ env/
 ENV/
 .venv
 
+# Node.js (小红书签名引擎依赖)
+node_modules/
+
 # 环境变量
 .env
 .env.local

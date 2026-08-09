@@ -49,26 +49,11 @@ const { t } = useI18n()
 </script>
 
 <style scoped lang="scss">
-@import url("https://fonts.googleapis.com/css2?family=Nunito+Sans:opsz@6..12&family=Raleway:wght@700&display=swap");
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
   font-family: "Nunito Sans", sans-serif;
-}
-body {
-  background: #fff;
-}
-main {
-  position: relative;
-  width: calc(min(90rem, 90%));
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  min-height: 100vh;
-  min-height: 100svh;
-  column-gap: 3rem;
-  padding-block: min(20vh, 3rem);
 }
 .swiper {
   width: 100%;

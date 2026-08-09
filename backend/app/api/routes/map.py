@@ -6,6 +6,7 @@ from ...models.schemas import (
     POISearchRequest,
     POISearchResponse,
     RouteRequest,
+    RouteInfo,
     RouteResponse,
     WeatherResponse
 )
@@ -44,8 +45,8 @@ async def search_poi(
         pois = service.search_poi(keywords, city, citylimit)
         
         return POISearchResponse(
-            success=True,
-            message="POI搜索成功",
+            success=bool(pois),
+            message="POI搜索成功" if pois else "未获取到 POI 数据（高德 MCP 结果解析尚未实现）",
             data=pois
         )
         
@@ -83,8 +84,8 @@ async def get_weather(
         weather_info = service.get_weather(city)
         
         return WeatherResponse(
-            success=True,
-            message="天气查询成功",
+            success=bool(weather_info),
+            message="天气查询成功" if weather_info else "未获取到天气数据（高德 MCP 结果解析尚未实现）",
             data=weather_info
         )
         
@@ -125,10 +126,22 @@ async def plan_route(request: RouteRequest):
             route_type=request.route_type
         )
         
+        if not route_info:
+            return RouteResponse(
+                success=False,
+                message="未能获取路线数据（高德 MCP 路线解析尚未实现）",
+                data=None,
+            )
+
         return RouteResponse(
             success=True,
             message="路线规划成功",
-            data=route_info
+            data=RouteInfo(
+                distance=float(route_info.get("distance", 0)),
+                duration=int(route_info.get("duration", 0)),
+                route_type=request.route_type,
+                description=str(route_info.get("distance_text", "")),
+            ),
         )
         
     except Exception as e:

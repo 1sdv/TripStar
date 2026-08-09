@@ -260,7 +260,8 @@
       "pdfSuccess": "PDF exported successfully!",
       "pdfFailed": "PDF export failed: {error}",
       "mapLoaded": "Map loaded successfully",
-      "mapLoadFailed": "Failed to load map"
+      "mapLoadFailed": "Failed to load map",
+      "amapJsKeyMissing": "Please configure the AMap JS API key in Settings first"
     },
     "graph": {
       "type": "Type",
@@ -301,6 +302,10 @@
     "imageLoadFailed": "Image failed to load",
     "mapInfo": {
       "dayAttraction": "Day {day} Attraction {index}"
-    }
+    },
+    "moveUp": "Up",
+    "moveDown": "Down",
+    "backToTop": "Top",
+    "reservationBadge": "📋 Reservation required"
   }
 }

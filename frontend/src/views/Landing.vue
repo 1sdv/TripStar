@@ -290,16 +290,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
-import { generateTripPlan, getTripHistory } from '@/services/api'
+import { generateTripPlan, getTripHistory, resumeTripPlan } from '@/services/api'
 import { getCurrentLocale } from '@/i18n'
 import NavBar from '@/components/NavBar.vue'
-import type { TripFormData, TripTaskEvent, TripHistoryItem, CityStay } from '@/types'
+import type { TripFormData, TripPlanResponse, TripTaskEvent, TripHistoryItem, CityStay } from '@/types'
 import type { Dayjs } from 'dayjs'
-import dayjs from 'dayjs'
 
 type LandingFormData = {
   cities: Array<{ city: string; days: number }>
@@ -359,11 +358,6 @@ const formData = reactive<LandingFormData>({
 })
 
 const totalDays = computed(() => formData.cities.reduce((sum, cs) => sum + (cs.days || 1), 0))
-
-const computedEndDate = computed(() => {
-  if (!formData.start_date) return null
-  return formData.start_date.add(totalDays.value - 1, 'day')
-})
 
 const addCity = () => {
   if (formData.cities.length >= 5) return
@@ -454,13 +448,92 @@ const loadHistoryPlans = async () => {
   }
 }
 
+// 已提交但尚未出结果的任务 id。刷新页面后据此重新挂接，
+// 否则后端仍在跑而用户已经永久看不到这份计划了。
+const PENDING_TASK_STORAGE_KEY = 'tripstar.pendingTaskId'
+
+let navigateTimer: ReturnType<typeof setTimeout> | null = null
+let resetLoadingTimer: ReturnType<typeof setTimeout> | null = null
+
+const clearPlanCache = () => {
+  sessionStorage.removeItem('tripPlan')
+  sessionStorage.removeItem('graphData')
+  sessionStorage.removeItem('planId')
+}
+
+const trackTaskEvent = (event: TripTaskEvent) => {
+  if (event.plan_id) planCode.value = event.plan_id
+  if (Number.isFinite(event.progress)) {
+    loadingProgress.value = Math.max(0, Math.min(100, event.progress))
+  }
+  loadingStatus.value = event.message || getStageStatusText(event.stage)
+}
+
+const applyGeneratedPlan = (response: TripPlanResponse) => {
+  loadingProgress.value = 100
+  loadingStatus.value = t('home.loading.done')
+
+  if (response.success && response.data) {
+    const planId = response.plan_id || planCode.value
+    sessionStorage.setItem('tripPlan', JSON.stringify(response.data))
+    if (response.graph_data) sessionStorage.setItem('graphData', JSON.stringify(response.graph_data))
+    if (planId) sessionStorage.setItem('planId', planId)
+    message.success(t('home.messages.generateSuccess'))
+    navigateTimer = setTimeout(() => {
+      navigateTimer = null
+      if (planId) {
+        router.push({ path: '/result', query: { plan_id: planId } })
+      } else {
+        router.push('/result')
+      }
+    }, 500)
+  } else {
+    clearPlanCache()
+    message.error(response.message || t('home.messages.generateFailed'))
+  }
+}
+
+const finishLoadingState = () => {
+  resetLoadingTimer = setTimeout(() => {
+    resetLoadingTimer = null
+    loading.value = false
+    loadingProgress.value = 0
+    loadingStatus.value = ''
+    panelHeight.value = 'auto'
+  }, 1000)
+}
+
+const resumePendingTask = async () => {
+  const pendingTaskId = sessionStorage.getItem(PENDING_TASK_STORAGE_KEY)
+  if (!pendingTaskId) return
+
+  planCode.value = pendingTaskId
+  loading.value = true
+  loadingProgress.value = 5
+  loadingStatus.value = t('home.loading.initializing')
+
+  try {
+    const response = await resumeTripPlan(pendingTaskId, { onTaskEvent: trackTaskEvent })
+    applyGeneratedPlan(response)
+  } catch (error: any) {
+    clearPlanCache()
+    message.error(error.message || t('home.messages.generateRetry'))
+  } finally {
+    sessionStorage.removeItem(PENDING_TASK_STORAGE_KEY)
+    finishLoadingState()
+  }
+}
+
 onMounted(() => {
   onScroll()
   window.addEventListener('scroll', onScroll, { passive: true })
   void loadHistoryPlans()
+  void resumePendingTask()
 })
 onUnmounted(() => {
   window.removeEventListener('scroll', onScroll)
+  if (navigateTimer !== null) clearTimeout(navigateTimer)
+  if (resetLoadingTimer !== null) clearTimeout(resetLoadingTimer)
 })
 
 const handleSubmit = async () => {
@@ -489,19 +562,19 @@ const handleSubmit = async () => {
   planCode.value = ''
 
   try {
-    sessionStorage.removeItem('tripPlan')
-    sessionStorage.removeItem('graphData')
-    sessionStorage.removeItem('planId')
+    clearPlanCache()
 
     const citiesPayload: CityStay[] = validCities.map(cs => ({ city: cs.city.trim(), days: cs.days || 1 }))
-    const endDate = computedEndDate.value!
+    // 天数必须与真正提交的城市列表一致：留空的城市行不参与行程，也不能计入总天数
+    const plannedDays = citiesPayload.reduce((sum, cs) => sum + cs.days, 0)
+    const endDate = formData.start_date.add(plannedDays - 1, 'day')
 
     const requestData: TripFormData = {
       city: citiesPayload[0].city,
       cities: citiesPayload,
       start_date: formData.start_date.format('YYYY-MM-DD'),
       end_date: endDate.format('YYYY-MM-DD'),
-      travel_days: totalDays.value,
+      travel_days: plannedDays,
       transportation: formData.transportation,
       accommodation: formData.accommodation,
       preferences: formData.preferences,
@@ -511,53 +584,23 @@ const handleSubmit = async () => {
 
     const response = await generateTripPlan(requestData, {
       onTaskCreated: (task) => {
+        const taskId = task.task_id || task.plan_id
         planCode.value = task.plan_id || task.task_id
+        // 任务已在后端排上队，刷新页面后要能凭它恢复
+        if (taskId) sessionStorage.setItem(PENDING_TASK_STORAGE_KEY, taskId)
         loadingProgress.value = 5
         loadingStatus.value = t('home.loading.initializing')
       },
-      onTaskEvent: (event) => {
-        if (event.plan_id) planCode.value = event.plan_id
-        if (Number.isFinite(event.progress)) {
-          loadingProgress.value = Math.max(0, Math.min(100, event.progress))
-        }
-        loadingStatus.value = event.message || getStageStatusText(event.stage)
-      }
+      onTaskEvent: trackTaskEvent,
     })
 
-    loadingProgress.value = 100
-    loadingStatus.value = t('home.loading.done')
-
-    if (response.success && response.data) {
-      const planId = response.plan_id || planCode.value
-      sessionStorage.setItem('tripPlan', JSON.stringify(response.data))
-      if (response.graph_data) sessionStorage.setItem('graphData', JSON.stringify(response.graph_data))
-      if (planId) sessionStorage.setItem('planId', planId)
-      message.success(t('home.messages.generateSuccess'))
-      setTimeout(() => {
-        if (planId) {
-          router.push({ path: '/result', query: { plan_id: planId } })
-        } else {
-          router.push('/result')
-        }
-      }, 500)
-    } else {
-      sessionStorage.removeItem('tripPlan')
-      sessionStorage.removeItem('graphData')
-      sessionStorage.removeItem('planId')
-      message.error(response.message || t('home.messages.generateFailed'))
-    }
+    applyGeneratedPlan(response)
   } catch (error: any) {
-    sessionStorage.removeItem('tripPlan')
-    sessionStorage.removeItem('graphData')
-    sessionStorage.removeItem('planId')
+    clearPlanCache()
     message.error(error.message || t('home.messages.generateRetry'))
   } finally {
-    setTimeout(() => {
-      loading.value = false
-      loadingProgress.value = 0
-      loadingStatus.value = ''
-      panelHeight.value = 'auto'
-    }, 1000)
+    sessionStorage.removeItem(PENDING_TASK_STORAGE_KEY)
+    finishLoadingState()
   }
 }
 </script>

@@ -4,8 +4,6 @@ import Antd from 'ant-design-vue'
 import 'ant-design-vue/dist/reset.css'
 import './styles/global.css'
 import App from './App.vue'
-import Landing from './views/Landing.vue'
-import Result from './views/Result.vue'
 import { i18n } from './i18n'
 
 const router = createRouter({
@@ -14,12 +12,14 @@ const router = createRouter({
     {
       path: '/',
       name: 'Landing',
-      component: Landing
+      // 懒加载：结果页会带上 echarts / html2canvas / swiper / 两个地图 SDK，
+      // 只看首页的访客不应该为这些资源付出首屏时间。
+      component: () => import('./views/Landing.vue')
     },
     {
       path: '/result',
       name: 'Result',
-      component: Result
+      component: () => import('./views/Result.vue')
     }
   ]
 })

@@ -21,6 +21,17 @@ MapProvider = Literal["google", "amap"]
 # 全局标志位：记录 Google 地理编码是否失败过，避免对每个景点都重复尝试并超时
 _google_geo_failed_flag = False
 
+
+def reset_google_geo_failure() -> None:
+    """清除 Google 地理编码失败标记。
+
+    该标记是为了避免逐个景点重复超时而设的短路开关，
+    但一次网络抖动会让整个进程永久降级到高德，因此配置变更时必须允许复位。
+    """
+    global _google_geo_failed_flag
+    _google_geo_failed_flag = False
+
+
 def get_map_provider() -> MapProvider:
     """根据当前运行时配置判断应使用哪个地图供应商。
 
@@ -33,8 +44,10 @@ def get_map_provider() -> MapProvider:
     return "amap"
 
 
-def geocode_unified(address: str, city: str, *, address_zh: str = "", address_en: str = "") -> dict:
-    """统一地理编码接口，返回 {"longitude": float, "latitude": float}。
+def geocode_unified(
+    address: str, city: str, *, address_zh: str = "", address_en: str = ""
+) -> Optional[dict]:
+    """统一地理编码接口，返回 {"longitude": float, "latitude": float}，全部失败时返回 None。
 
     根据 get_map_provider() 的结果，自动路由到 Google 或高德，
     并根据供应商特性自动选择最合适语言的地址：

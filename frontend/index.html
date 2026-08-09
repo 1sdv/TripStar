@@ -7,7 +7,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap"
+  <link
+    href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Nunito+Sans:opsz@6..12&family=Raleway:wght@700&display=swap"
     rel="stylesheet">
   <title>TripStar</title>
 </head>
@@ -15,8 +16,10 @@
 <body>
   <div id="app"></div>
   <script type="text/javascript">
+    // 高德 JS API 2.0 要求的安全密钥，由构建期环境变量 VITE_AMAP_SECURITY_JS_CODE 注入。
+    // 留空时高德会拒绝路线规划等服务插件，路线会退化成直线连接。
     window._AMapSecurityConfig = {
-      securityJsCode: 'your_vite_amap_web_js_security_key'
+      securityJsCode: '%VITE_AMAP_SECURITY_JS_CODE%'
     }
   </script>
   <script type="module" src="/src/main.ts"></script>

@@ -133,12 +133,13 @@ sequenceDiagram
 
 ## 核心功能与工作流
 
-### 1. 异步轮询任务系统 (解决网关超时)
+### 1. 异步任务系统 (解决网关超时)
 
 针对 LLM 生成超长文本易导致 504 Gateway Timeout 的痛点，重构了后端的任务调度机制。
 
-* **`POST /api/trip/plan`**: 立即返回 `task_id`，将长达数分钟的推理任务推入后台 `asyncio.create_task`。
-* **`GET /api/trip/status/{task_id}`**: 前端每 3 秒发起一次轻量请求，实时获取当前处理进度（如"🔍 正在搜索景点..."），直至状态变为 `completed`。
+* **`POST /api/trip/plan`**: 立即返回 `task_id` 与 `ws_url`，将长达数分钟的推理任务推入后台 `asyncio.create_task`。
+* **`WS /api/trip/ws/{task_id}`**: 前端订阅该 WebSocket 实时接收处理进度（如"🔍 正在搜索景点..."），直至状态变为 `completed`。
+* **`GET /api/trip/status/{task_id}`**: 用于断线重连——刷新页面、合盖休眠或代理空闲超时后，前端凭 `task_id` 查询任务当前状态并重新订阅，不会丢失后端仍在执行的计划。
 
 ### 2. 多智能体架构 (Agentic Workflow)
 
@@ -166,7 +167,7 @@ sequenceDiagram
 * Python 3.10+
 * Node.js 18+
 * 大模型 API Key（推荐使用兼容 OpenAI 格式的服务商，如豆包）
-* 高德地图两种key： Web服务 、 Web端(JS API) (其**安全密钥 JSCode**配置在index.html中)（[高德api](https://lbs.amap.com/)）
+* 高德地图两种key： Web服务 、 Web端(JS API)，以及与 JS API Key 配套的**安全密钥 JSCode**（通过环境变量 `VITE_AMAP_SECURITY_JS_CODE` 配置）（[高德api](https://lbs.amap.com/)）
 * [Google Maps API Key](https://developers.google.com/maps/apis-by-platform)（若要使用 Google 地图引擎，必须在 Google Cloud 控制台中开通：**Geocoding API, Places API (New), Directions API, Maps JavaScript API, Weather API**，需要绑卡）
 * 小红书Cookie（[小红书](https://www.xiaohongshu.com/) 网页端登录后从浏览器开发者工具复制）
 * 安装 `uv` 包管理器
@@ -177,7 +178,7 @@ sequenceDiagram
 
 * 容器启动时不再读取项目目录里的 `backend/.env`，请确保将配置以环境变量的形式传入。
 * `docker-compose.yaml` 中显式配置了必要的运行时代理和 API keys，支持传入 `GOOGLE_MAPS_API_KEY` 与 `GOOGLE_MAPS_PROXY` 等变量。
-* 前端构建期变量 `VITE_AMAP_WEB_JS_KEY` 会通过 `build.args` 自动注入前端。
+* 前端构建期变量 `VITE_AMAP_WEB_JS_KEY` 与 `VITE_AMAP_SECURITY_JS_CODE` 会通过 `build.args` 自动注入前端。
 
 
 ```
@@ -230,7 +231,8 @@ npm install
 cp .env.example .env
 # [必填] VITE_AMAP_WEB_KEY 与后端保持一致
 # [必填] VITE_AMAP_WEB_JS_KEY 必须是 Web端(JS API) 类型的key
-# 另外，由于 JS API 2.0 政策要求，**还需要在 index.html 注入你的安全密钥(securityJsCode)**
+# [必填] VITE_AMAP_SECURITY_JS_CODE 高德 JS API 2.0 要求的安全密钥
+#        留空时高德会拒绝路线规划插件，地图上的路线会退化成直线
 
 # 启动 Vite 开发服务器
 npm run dev
@@ -257,10 +259,10 @@ TripStar/
 │
 ├── frontend/                      # Vue 3 互动前端
 │   ├── src/
-│   │   ├── views/                 # 主路由视图 (Home.vue 表单输入; Result.vue 路书展示)
+│   │   ├── views/                 # 主路由视图 (Landing.vue 表单输入; Result.vue 路书展示，均为懒加载)
 │   │   ├── components/            # 独立复用的 UI / 背景组件
-│   │   └── services/              # Axios 异步轮询及配置重试逻辑 (api.ts)
-│   ├── index.html                 # 入口挂载及高德地图 SecurityKey 预设
+│   │   └── services/              # Axios 请求与 WebSocket 进度订阅/断线重连 (api.ts)
+│   ├── index.html                 # 入口挂载及高德地图 SecurityKey 注入占位符
 │   ├── .env                       # 本地前端开发环境变量（Docker 构建时忽略）
 │   └── package.json
 │

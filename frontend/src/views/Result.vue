@@ -299,14 +299,14 @@
                             @click="moveAttraction(day.day_index, index, 'up')"
                             :disabled="index === 0"
                           >
-                            Up
+                            {{ t('result.moveUp') }}
                           </a-button>
                           <a-button
                             size="small"
                             @click="moveAttraction(day.day_index, index, 'down')"
                             :disabled="index === day.attractions.length - 1"
                           >
-                            Down
+                            {{ t('result.moveDown') }}
                           </a-button>
                           <a-button
                             size="small"
@@ -354,7 +354,7 @@
                         <p v-if="item.rating"><strong>{{ t('result.fieldRating') }}:</strong> {{ item.rating }}</p>
                         <!-- 预约提醒 -->
                         <div v-if="item.reservation_required" class="reservation-alert">
-                          <span class="reservation-badge">📋 需提前预约</span>
+                          <span class="reservation-badge">{{ t('result.reservationBadge') }}</span>
                           <span v-if="item.reservation_tips" class="reservation-tips">{{ item.reservation_tips }}</span>
                         </div>
                       </div>
@@ -560,7 +560,7 @@
     <!-- 回到顶部按钮 -->
     <a-back-top :visibility-height="300">
       <div class="back-top-button">
-        Top
+        {{ t('result.backToTop') }}
       </div>
     </a-back-top>
 
@@ -576,7 +576,14 @@ import { message } from 'ant-design-vue'
 import AMapLoader from '@amap/amap-jsapi-loader'
 import { Loader as GoogleMapsLoader } from '@googlemaps/js-api-loader'
 import html2canvas from 'html2canvas'
-import * as echarts from 'echarts'
+// 按需引入：本页只画一张力导向关系图，不需要 echarts 全量包
+import * as echarts from 'echarts/core'
+import { GraphChart } from 'echarts/charts'
+import { TooltipComponent, LegendComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
+import type { ComposeOption } from 'echarts/core'
+import type { GraphSeriesOption } from 'echarts/charts'
+import type { TooltipComponentOption, LegendComponentOption } from 'echarts/components'
 import Swiper from 'swiper'
 import { EffectCoverflow, Keyboard, Mousewheel } from 'swiper/modules'
 import NavBar from '@/components/NavBar.vue'
@@ -587,10 +594,16 @@ import {
   getRuntimeApiBaseUrl,
   getRuntimeMapJsKey,
   getRuntimeGoogleMapsApiKey,
+  setRuntimeGoogleMapsApiKey,
   getBackendRuntimeSettings,
   pollTaskStatus,
   RUNTIME_SETTINGS_UPDATED_EVENT,
 } from '@/services/api'
+
+echarts.use([GraphChart, TooltipComponent, LegendComponent, CanvasRenderer])
+
+// 按需构建下没有全量的 EChartsOption，需要按实际注册的模块组合出选项类型
+type ECOption = ComposeOption<GraphSeriesOption | TooltipComponentOption | LegendComponentOption>
 
 const router = useRouter()
 const route = useRoute()
@@ -904,6 +917,7 @@ const graphData = ref<KnowledgeGraphData | null>(null)
 const graphCategories = ref<GraphCategory[]>([])
 let kgChart: echarts.ECharts | null = null
 let kgResizeHandler: (() => void) | null = null
+let kgResizeTimer: ReturnType<typeof setTimeout> | null = null
 
 const applyTripPlanPayload = async (payload: {
   plan: TripPlan
@@ -1240,12 +1254,19 @@ onMounted(async () => {
 
   if (data && canUseCachedData) {
     const gd = sessionStorage.getItem('graphData')
-    await applyTripPlanPayload({
-      plan: JSON.parse(data),
-      graph: gd ? JSON.parse(gd) : null,
-      planId: planId.value || cachedPlanId,
-    })
-    return
+    try {
+      await applyTripPlanPayload({
+        plan: JSON.parse(data),
+        graph: gd ? JSON.parse(gd) : null,
+        planId: planId.value || cachedPlanId,
+      })
+      return
+    } catch (error) {
+      // 缓存损坏时不能让异常冒出 onMounted，否则下面的后端回补逻辑不会执行
+      console.error('会话缓存中的行程数据无法解析，已清除并回退到后端拉取:', error)
+      sessionStorage.removeItem('tripPlan')
+      sessionStorage.removeItem('graphData')
+    }
   }
 
   if (planId.value) {
@@ -1297,6 +1318,10 @@ onUnmounted(() => {
   if (kgResizeHandler) {
     window.removeEventListener('resize', kgResizeHandler)
     kgResizeHandler = null
+  }
+  if (kgResizeTimer !== null) {
+    clearTimeout(kgResizeTimer)
+    kgResizeTimer = null
   }
   if (kgChart) {
     kgChart.dispose()
@@ -1850,6 +1875,22 @@ const handleImageError = (event: Event) => {
 
 
 
+const escapeHtml = (value: unknown): string => {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+// 导出 HTML 会直接写进 innerHTML，图片地址必须限制协议，避免 javascript: 之类的注入
+const safeImageUrl = (value: unknown): string => {
+  const url = String(value ?? '').trim()
+  if (!/^(https?:\/\/|data:image\/)/i.test(url)) return ''
+  return escapeHtml(url)
+}
+
 // ========== 构建导出用的纯净 HTML ==========
 const buildExportHTML = (mapDataUrl: string = ''): string => {
   if (!tripPlan.value) return ''
@@ -1873,19 +1914,19 @@ const buildExportHTML = (mapDataUrl: string = ''): string => {
   tp.days.forEach((day, index) => {
     let attractionsHTML = ''
     day.attractions.forEach((a, ai) => {
-      const photoUrl = a.image_url || attractionPhotos.value[a.name] || ''
+      const photoUrl = safeImageUrl(a.image_url || attractionPhotos.value[a.name] || '')
       const durationText = t('result.export.durationLine', { duration: a.visit_duration || '—' })
       // 图片自适应：不压缩不裁剪，保持原始比例
       const imgTag = photoUrl
         ? `<img src="${photoUrl}" style="width:100%;height:auto;max-height:400px;object-fit:contain;border-radius:8px;margin-bottom:8px;" crossorigin="anonymous" />`
-        : `<div style="width:100%;height:80px;background:linear-gradient(135deg,#667eea,#764ba2);border-radius:8px;margin-bottom:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:bold;">${a.name}</div>`
+        : `<div style="width:100%;height:80px;background:linear-gradient(135deg,#667eea,#764ba2);border-radius:8px;margin-bottom:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:bold;">${escapeHtml(a.name)}</div>`
       attractionsHTML += `
         <div style="flex:0 0 48%;background:#fff;border-radius:10px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.07);margin-bottom:14px;">
           ${imgTag}
-          <h4 style="margin:0 0 6px;font-size:17px;color:#1a1a1a;">${ai + 1}. ${a.name}</h4>
-          <p style="margin:2px 0;font-size:14px;color:#555;">${a.address || '—'}</p>
-          <p style="margin:2px 0;font-size:14px;color:#555;">${durationText}${a.ticket_price ? `  |  ¥${a.ticket_price}` : ''}</p>
-          <p style="margin:4px 0;font-size:14px;color:#666;">${a.description || ''}</p>
+          <h4 style="margin:0 0 6px;font-size:17px;color:#1a1a1a;">${ai + 1}. ${escapeHtml(a.name)}</h4>
+          <p style="margin:2px 0;font-size:14px;color:#555;">${escapeHtml(a.address || '—')}</p>
+          <p style="margin:2px 0;font-size:14px;color:#555;">${escapeHtml(durationText)}${a.ticket_price ? `  |  ¥${escapeHtml(a.ticket_price)}` : ''}</p>
+          <p style="margin:4px 0;font-size:14px;color:#666;">${escapeHtml(a.description || '')}</p>
         </div>`
     })
 
@@ -1894,14 +1935,14 @@ const buildExportHTML = (mapDataUrl: string = ''): string => {
     if (day.meals && day.meals.length) {
       mealsHTML = `<div style="margin-top:10px;"><strong style="color:#333;">${t('result.export.mealTitle')}</strong><div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;">`
       day.meals.forEach(m => {
-        mealsHTML += `<div style="background:#fffbe6;padding:8px 14px;border-radius:8px;font-size:12px;color:#333;"><b>${mealLabels[m.type] || m.type}</b>: ${m.name || t('result.export.noMealRecommendation')}${m.estimated_cost ? ` (¥${m.estimated_cost})` : ''}</div>`
+        mealsHTML += `<div style="background:#fffbe6;padding:8px 14px;border-radius:8px;font-size:12px;color:#333;"><b>${escapeHtml(mealLabels[m.type] || m.type)}</b>: ${escapeHtml(m.name || t('result.export.noMealRecommendation'))}${m.estimated_cost ? ` (¥${escapeHtml(m.estimated_cost)})` : ''}</div>`
       })
       mealsHTML += '</div></div>'
     }
 
     daysHTML += `
       <div style="background:#ffffff;border-radius:14px;padding:20px;margin-bottom:18px;box-shadow:0 2px 10px rgba(0,0,0,0.06);">
-        <h3 style="margin:0 0 14px;color:#667eea;font-size:18px;">${t('result.export.dayTitle', { day: index + 1 })} <span style="font-size:14px;color:#888;margin-left:8px;">${day.date || ''}</span></h3>
+        <h3 style="margin:0 0 14px;color:#667eea;font-size:18px;">${t('result.export.dayTitle', { day: index + 1 })} <span style="font-size:14px;color:#888;margin-left:8px;">${escapeHtml(day.date || '')}</span></h3>
         <div style="display:flex;flex-wrap:wrap;gap:12px;">
           ${attractionsHTML}
         </div>
@@ -1943,7 +1984,7 @@ const buildExportHTML = (mapDataUrl: string = ''): string => {
     mapHTML = `
       <div style="background:#ffffff;border-radius:14px;padding:20px;margin-bottom:18px;box-shadow:0 2px 10px rgba(0,0,0,0.06);">
         <h3 style="margin:0 0 14px;color:#667eea;">${t('result.side.map')}</h3>
-        <img src="${mapDataUrl}" style="width:100%;height:auto;border-radius:10px;" />
+        <img src="${safeImageUrl(mapDataUrl)}" style="width:100%;height:auto;border-radius:10px;" />
       </div>`
   }
 
@@ -1955,21 +1996,21 @@ const buildExportHTML = (mapDataUrl: string = ''): string => {
       tp.weather_info.forEach((w: any) => {
         weatherCards += `
           <div style="flex:1;min-width:180px;background:#2b2d3c;padding:16px;border-radius:12px;margin:5px;">
-            <div style="text-align:center;color:#00e5ff;font-weight:bold;margin-bottom:12px;font-size:15px;">${w.date}</div>
+            <div style="text-align:center;color:#00e5ff;font-weight:bold;margin-bottom:12px;font-size:15px;">${escapeHtml(w.date)}</div>
             <div style="display:flex;align-items:center;margin-bottom:10px;">
               <div style="line-height:1.2;">
                 <div style="font-size:12px;color:#99b0c9;margin-bottom:2px;">${t('result.export.daytime')}</div>
-                <div style="font-size:14px;color:#fff;font-weight:600;">${w.day_weather} ${w.day_temp}°C</div>
+                <div style="font-size:14px;color:#fff;font-weight:600;">${escapeHtml(w.day_weather)} ${escapeHtml(w.day_temp)}°C</div>
               </div>
             </div>
             <div style="display:flex;align-items:center;margin-bottom:12px;">
               <div style="line-height:1.2;">
                 <div style="font-size:12px;color:#99b0c9;margin-bottom:2px;">${t('result.export.nighttime')}</div>
-                <div style="font-size:14px;color:#fff;font-weight:600;">${w.night_weather} ${w.night_temp}°C</div>
+                <div style="font-size:14px;color:#fff;font-weight:600;">${escapeHtml(w.night_weather)} ${escapeHtml(w.night_temp)}°C</div>
               </div>
             </div>
             <div style="border-top:1px solid rgba(255,255,255,0.1);padding-top:10px;text-align:center;font-size:12px;color:#99b0c9;">
-              ${w.wind_direction} ${w.wind_power}
+              ${escapeHtml(w.wind_direction)} ${escapeHtml(w.wind_power)}
             </div>
           </div>`
       })
@@ -1984,7 +2025,7 @@ const buildExportHTML = (mapDataUrl: string = ''): string => {
       weatherHTML = `
         <div style="background:#ffffff;border-radius:14px;padding:20px;margin-bottom:18px;box-shadow:0 2px 10px rgba(0,0,0,0.06);">
           <h3 style="margin:0 0 10px;color:#667eea;">${t('result.export.weatherTitle')}</h3>
-          <p style="font-size:14px;color:#333;line-height:1.8;">${typeof tp.weather_info === 'string' ? tp.weather_info : JSON.stringify(tp.weather_info)}</p>
+          <p style="font-size:14px;color:#333;line-height:1.8;">${escapeHtml(typeof tp.weather_info === 'string' ? tp.weather_info : JSON.stringify(tp.weather_info))}</p>
         </div>`
     }
   }
@@ -1995,9 +2036,9 @@ const buildExportHTML = (mapDataUrl: string = ''): string => {
     let hotelItems = ''
     tp.hotel_recommendations.forEach((h) => {
       hotelItems += `<div style="background:#e3f2fd;padding:12px 16px;border-radius:10px;margin-bottom:8px;">
-        <b style="color:#1565c0;">${h.name || t('result.export.hotelFallback')}</b>
-        ${h.price ? `<span style="float:right;color:#e65100;font-weight:bold;">¥${h.price}${t('result.export.perNight')}</span>` : ''}
-        ${h.address ? `<p style="margin:4px 0 0;font-size:12px;color:#555;">${h.address}</p>` : ''}
+        <b style="color:#1565c0;">${escapeHtml(h.name || t('result.export.hotelFallback'))}</b>
+        ${h.price ? `<span style="float:right;color:#e65100;font-weight:bold;">¥${escapeHtml(h.price)}${t('result.export.perNight')}</span>` : ''}
+        ${h.address ? `<p style="margin:4px 0 0;font-size:12px;color:#555;">${escapeHtml(h.address)}</p>` : ''}
       </div>`
     })
     hotelHTML = `
@@ -2020,13 +2061,13 @@ const buildExportHTML = (mapDataUrl: string = ''): string => {
   return `
     <div style="width:800px;padding:30px;background:#f0f2f5;font-family:'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;color:#333;">
       <div style="text-align:center;margin-bottom:24px;">
-        <h1 style="margin:0;font-size:28px;color:#333;">${t('result.export.title', { city: tp.city })}</h1>
+        <h1 style="margin:0;font-size:28px;color:#333;">${t('result.export.title', { city: escapeHtml(tp.city) })}</h1>
         <p style="margin:6px 0 0;font-size:14px;color:#888;">${t('result.export.subtitle', {
-          start: tp.start_date || '',
-          end: tp.end_date || '',
+          start: escapeHtml(tp.start_date || ''),
+          end: escapeHtml(tp.end_date || ''),
           days: tp.days?.length || 0,
         })}</p>
-        ${tp.overall_suggestions ? `<p style="margin:8px auto 0;max-width:600px;font-size:13px;color:#666;line-height:1.6;">${tp.overall_suggestions}</p>` : ''}
+        ${tp.overall_suggestions ? `<p style="margin:8px auto 0;max-width:600px;font-size:13px;color:#666;line-height:1.6;">${escapeHtml(tp.overall_suggestions)}</p>` : ''}
       </div>
       ${budgetHTML}
       ${mapHTML}
@@ -2039,7 +2080,29 @@ const buildExportHTML = (mapDataUrl: string = ''): string => {
 
 // ========== 捕获地图截图 ==========
 const captureMapScreenshot = async (): Promise<string> => {
+  // 临时将地图容器显示出来以便截图（可能被 v-show 隐藏）
+  // 必须在检查 clientHeight 之前完成，否则从"概览/每日行程"标签导出时
+  // 容器高度恒为 0，会在还没显示出来之前就提前返回。
+  const parentCard = document.querySelector('.right-map') as HTMLElement | null
+  const wasHidden = Boolean(parentCard && parentCard.style.display === 'none')
+  const restoreCard = () => {
+    if (parentCard && wasHidden) {
+      parentCard.style.display = 'none'
+      parentCard.style.position = ''
+      parentCard.style.left = ''
+    }
+  }
+
+  if (parentCard && wasHidden) {
+    parentCard.style.display = 'block'
+    parentCard.style.position = 'absolute'
+    parentCard.style.left = '-9999px'
+  }
+
   try {
+    // 等待一帧让渲染生效
+    await new Promise(resolve => setTimeout(resolve, 300))
+
     // 根据当前地图供应商选择对应的 DOM 容器
     const containerId = mapProviderType.value === 'google' ? 'google-map-container' : 'amap-container'
     const mapEl = document.getElementById(containerId)
@@ -2047,18 +2110,6 @@ const captureMapScreenshot = async (): Promise<string> => {
       console.warn('⚠️ 地图容器不可见或未初始化，跳过地图截图')
       return ''
     }
-
-    // 临时将地图容器显示出来以便截图（可能被 v-show 隐藏）
-    const parentCard = document.querySelector('.right-map') as HTMLElement | null
-    const wasHidden = parentCard && parentCard.style.display === 'none'
-    if (parentCard && wasHidden) {
-      parentCard.style.display = 'block'
-      parentCard.style.position = 'absolute'
-      parentCard.style.left = '-9999px'
-    }
-
-    // 等待一帧让渲染生效
-    await new Promise(resolve => setTimeout(resolve, 300))
 
     const mapCanvas = await html2canvas(mapEl, {
       backgroundColor: '#1a1a2e',
@@ -2078,17 +2129,12 @@ const captureMapScreenshot = async (): Promise<string> => {
       }
     })
 
-    // 还原隐藏状态
-    if (parentCard && wasHidden) {
-      parentCard.style.display = 'none'
-      parentCard.style.position = ''
-      parentCard.style.left = ''
-    }
-
     return mapCanvas.toDataURL('image/png')
   } catch (err) {
     console.warn('⚠️ 地图截图失败，导出将不包含地图:', err)
     return ''
+  } finally {
+    restoreCard()
   }
 }
 
@@ -2153,7 +2199,7 @@ const initKnowledgeGraph = () => {
     kgChart.dispose()
   }
 
-  kgChart = echarts.init(container, 'grey')
+  kgChart = echarts.init(container)
   const containerWidth = Math.max(container.clientWidth, 320)
   const containerHeight = Math.max(container.clientHeight, 320)
   const nodesWithVisual = graphData.value.nodes.map((node) => {
@@ -2176,7 +2222,7 @@ const initKnowledgeGraph = () => {
   const kgForceRepulsion = containerWidth < 500 ? 360 : 520
   const kgForceEdgeLength: [number, number] = containerWidth < 500 ? [60, 140] : [95, 220]
 
-  const option: echarts.EChartsOption = {
+  const option: ECOption = {
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'item',
@@ -2297,18 +2343,19 @@ const initKnowledgeGraph = () => {
   }
   kgResizeHandler = () => {
     if (!graphData.value) return
-    initKnowledgeGraph()
+    // 拖动窗口边缘会连续触发 resize，去抖避免反复重建图表并重播力导动画
+    if (kgResizeTimer !== null) clearTimeout(kgResizeTimer)
+    kgResizeTimer = setTimeout(() => {
+      kgResizeTimer = null
+      if (!graphData.value) return
+      if (kgChart) {
+        kgChart.resize()
+      } else {
+        initKnowledgeGraph()
+      }
+    }, 200)
   }
   window.addEventListener('resize', kgResizeHandler)
-}
-
-const escapeHtml = (value: unknown): string => {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
 }
 
 const buildMarkerContent = (dayNo: number, stopNo: number): string => {
@@ -2522,7 +2569,13 @@ const searchRoutePath = (
 }
 
 // 初始化地图入口
+// 每次初始化都会递增该计数器：Promise.race 只能停止"等待"，无法真正取消
+// 已经在跑的 Google 初始化流程，因此用它作为令牌让过期流程自行退出。
+let mapInitGeneration = 0
+
 const initMap = async () => {
+  const generation = ++mapInitGeneration
+
   // 1. 先尝试从 localStorage 读取 Google Maps API Key
   let googleKey = getRuntimeGoogleMapsApiKey()
 
@@ -2533,43 +2586,52 @@ const initMap = async () => {
       if (backendSettings.google_maps_api_key) {
         googleKey = backendSettings.google_maps_api_key
         // 同步到 localStorage，下次不再需要请求后端
-        const { setRuntimeGoogleMapsApiKey: syncKey } = await import('@/services/api')
-        syncKey(googleKey)
+        setRuntimeGoogleMapsApiKey(googleKey)
       }
     } catch (err) {
       console.warn('从后端获取 Google Maps 配置失败:', err)
     }
   }
 
+  if (generation !== mapInitGeneration) return
+
   // 3. 尝试初始化 Google Maps
   if (googleKey) {
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined
     try {
       // 超时控制：如果 5 秒内未加载完，强制 reject 以触发降级
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Google Maps 加载超时，可能由于网络环境限制')), 5000)
+        timeoutHandle = setTimeout(
+          () => reject(new Error('Google Maps 加载超时，可能由于网络环境限制')),
+          5000
+        )
       })
-      const initPromise = initGoogleMap(googleKey)
-      await Promise.race([initPromise, timeoutPromise])
+      await Promise.race([initGoogleMap(googleKey, generation), timeoutPromise])
       return
     } catch (error) {
       console.warn('Google Maps 加载失败，即将降级到高德地图:', error)
+      if (generation !== mapInitGeneration) return
       destroyCurrentMap()
       // 等待 DOM 更新，确保高德容器可以显示
       await nextTick()
+    } finally {
+      clearTimeout(timeoutHandle)
     }
   }
+
+  if (generation !== mapInitGeneration) return
 
   // 4. 降级/默认：初始化高德地图
   await initAMap()
 }
 
 // 初始化 Google Maps
-const initGoogleMap = async (apiKey: string) => {
+const initGoogleMap = async (apiKey: string, generation: number) => {
   mapProviderType.value = 'google'
   const loader = new GoogleMapsLoader({
     apiKey,
     version: 'weekly',
-    language: 'zh-CN', // 保持语言为中文体验较好
+    language: localeTag.value,
   })
 
   // 这会抛出异常，如由于网络、无代理引起等，正好会被上层捕捉
@@ -2579,6 +2641,9 @@ const initGoogleMap = async (apiKey: string) => {
   // 加载可能用到的模块
   await loader.importLibrary('routes')
   await loader.importLibrary('marker')
+
+  // 等待期间可能已经超时降级到高德，此时必须放弃，否则会出现两个活地图实例
+  if (generation !== mapInitGeneration) return
 
   const container = document.getElementById('google-map-container')
   if (!container) throw new Error('Cannot find google-map-container')
@@ -2613,13 +2678,15 @@ const initGoogleMap = async (apiKey: string) => {
   })
 
   // 添加景点标记
-  await addGoogleAttractionMarkers()
+  await addGoogleAttractionMarkers(generation)
+
+  if (generation !== mapInitGeneration) return
 
   message.success(t('result.messages.mapLoaded'))
 }
 
 // 添加 Google Maps 景点标记
-const addGoogleAttractionMarkers = async () => {
+const addGoogleAttractionMarkers = async (generation: number) => {
   if (!tripPlan.value || !googleMap) return
 
   const allAttractions: any[] = []
@@ -2645,15 +2712,6 @@ const addGoogleAttractionMarkers = async () => {
     const position = { lat: attraction.location.latitude, lng: attraction.location.longitude }
     bounds.extend(position)
 
-    // 创建自定义 DOM 元素以模拟 AMap 的原生样式
-    const div = document.createElement('div')
-    div.innerHTML = buildMarkerContent(attraction.dayIndex + 1, attraction.attrIndex + 1)
-    // 为了使 HTML 居中在点上，可以用 Marker 的 icon 承载或者用 AdvancedMarkerElement (如果你需要标准 API)。
-    // 这里采用兼容大多数的简单的 svg data URI：
-    const svgContent = buildFeatherCircleSvgDataUrl(34, '#d76e42', '#a14625')
-    
-    // 这里如果想完全复用 DOM 较为复杂，我们可以直接采用原生的 google.maps.Marker 与自定义 icon
-    // 用一个简单的 SVG data URI 画一个有数字的 icon
     const markerText = `${attraction.dayIndex + 1}-${attraction.attrIndex + 1}`
     const svgIcon = `data:image/svg+xml;charset=UTF-8,` + encodeURIComponent(`
       <svg xmlns="http://www.w3.org/2000/svg" width="34" height="42" viewBox="0 0 34 42">
@@ -2687,7 +2745,11 @@ const addGoogleAttractionMarkers = async () => {
   })
 
   // 绘制 Google Maps 路线
+  // 已经降级到高德时不要再发这些计费的 Directions 请求
+  if (generation !== mapInitGeneration) return
   await drawGoogleRoutes(allAttractions)
+
+  if (generation !== mapInitGeneration) return
 
   if (allAttractions.length > 0 && googleMap) {
     googleMap.fitBounds(bounds)
@@ -2779,7 +2841,7 @@ const initAMap = async () => {
     mapProviderType.value = 'amap'
     const mapJsKey = getRuntimeMapJsKey()
     if (!mapJsKey) {
-      message.warning('请先在设置中配置高德地图 JS Key')
+      message.warning(t('result.messages.amapJsKeyMissing'))
       return
     }
     const AMap = await AMapLoader.load({

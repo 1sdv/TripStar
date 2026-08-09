@@ -72,8 +72,8 @@ async def search_poi(keywords: str, city: str = "北京"):
         result = amap_service.search_poi(keywords, city)
 
         return {
-            "success": True,
-            "message": "搜索成功",
+            "success": bool(result),
+            "message": "搜索成功" if result else "未获取到 POI 数据（高德 MCP 结果解析尚未实现）",
             "data": result
         }
 

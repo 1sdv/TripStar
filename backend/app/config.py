@@ -131,6 +131,25 @@ def _apply_runtime_overrides(overrides: Dict[str, Any]) -> None:
 _runtime_overrides = _load_runtime_overrides()
 _apply_runtime_overrides(_runtime_overrides)
 
+# 这些字段是真正的机密，绝不能以明文离开进程。
+# 其余字段（高德 JS Key、Google Maps Key、base_url、model、proxy）浏览器端本身就需要，
+# 且属于可公开或带 referer 限制的凭据，因此不做掩码。
+_SECRET_SETTING_KEYS = {
+    "openai_api_key",
+    "xhs_cookie",
+    "vite_amap_web_key",
+}
+_MASK_CHAR = "\u2022"
+
+
+def _mask_secret(value: str) -> str:
+    """把机密值转换为不可还原的掩码，仅保留少量首尾字符便于用户辨认。"""
+    if not value:
+        return ""
+    if len(value) <= 8:
+        return _MASK_CHAR * 8
+    return f"{value[:4]}{_MASK_CHAR * 8}{value[-4:]}"
+
 
 def get_settings() -> Settings:
     """获取配置实例"""
@@ -138,8 +157,12 @@ def get_settings() -> Settings:
 
 
 def get_runtime_settings() -> Dict[str, str]:
-    """获取当前运行时配置（供前端设置页读取）。"""
-    return {
+    """获取当前运行时配置（供前端设置页读取）。
+
+    机密字段以掩码返回；进程内部需要真实值时请直接读 settings 对象，
+    不要让明文经由这个接口离开后端。
+    """
+    raw = {
         "vite_amap_web_key": settings.vite_amap_web_key or "",
         "vite_amap_web_js_key": settings.vite_amap_web_js_key or "",
         "google_maps_api_key": settings.google_maps_api_key or "",
@@ -148,6 +171,10 @@ def get_runtime_settings() -> Dict[str, str]:
         "openai_api_key": settings.openai_api_key or "",
         "openai_base_url": settings.openai_base_url or "",
         "openai_model": settings.openai_model or "",
+    }
+    return {
+        key: _mask_secret(value) if key in _SECRET_SETTING_KEYS else value
+        for key, value in raw.items()
     }
 
 
@@ -159,7 +186,11 @@ def update_runtime_settings(updates: Dict[str, Any]) -> Dict[str, str]:
     for key, value in updates.items():
         if key not in _RUNTIME_SETTING_KEYS:
             continue
-        normalized[key] = str(value).strip() if value is not None else ""
+        text = str(value).strip() if value is not None else ""
+        # 前端把掩码原样回传时视为"未修改"，否则会把真实密钥覆盖成掩码。
+        if _MASK_CHAR in text:
+            continue
+        normalized[key] = text
 
     _runtime_overrides.update(normalized)
     _persist_runtime_overrides(_runtime_overrides)

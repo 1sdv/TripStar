@@ -260,7 +260,8 @@
       "pdfSuccess": "PDF 导出成功!",
       "pdfFailed": "导出 PDF 失败: {error}",
       "mapLoaded": "地图加载成功",
-      "mapLoadFailed": "地图加载失败"
+      "mapLoadFailed": "地图加载失败",
+      "amapJsKeyMissing": "请先在设置中配置高德地图 JS Key"
     },
     "graph": {
       "type": "类型",
@@ -301,6 +302,10 @@
     "imageLoadFailed": "图片加载失败",
     "mapInfo": {
       "dayAttraction": "第 {day} 天 景点 {index}"
-    }
+    },
+    "moveUp": "上移",
+    "moveDown": "下移",
+    "backToTop": "顶部",
+    "reservationBadge": "📋 需提前预约"
   }
 }

@@ -67,6 +67,7 @@
       :title="t('settings.title')"
       :width="820"
       :confirm-loading="settingsSaving"
+      :ok-button-props="{ disabled: !settingsLoaded }"
       :ok-text="t('settings.saveApply')"
       :cancel-text="t('settings.cancel')"
       @ok="saveSettingsNow"
@@ -182,6 +183,7 @@ const { t, locale } = useI18n()
 const settingsVisible = ref(false)
 const settingsLoading = ref(false)
 const settingsSaving = ref(false)
+const settingsLoaded = ref(false)
 const settingsForm = reactive<RuntimeSettings>({
   api_base_url: '',
   vite_amap_web_key: '',
@@ -222,9 +224,11 @@ const applyRuntimeSettings = (settings: RuntimeSettings) => {
 const openSettingsDialog = async () => {
   settingsVisible.value = true
   settingsLoading.value = true
+  settingsLoaded.value = false
   try {
     const settings = await getRuntimeSettings()
     applyRuntimeSettings(settings)
+    settingsLoaded.value = true
   } catch (error: any) {
     message.error(error?.message || t('settings.messages.loadFailed'))
   } finally {
@@ -233,6 +237,11 @@ const openSettingsDialog = async () => {
 }
 
 const saveSettingsNow = async () => {
+  // 读取失败时表单是空的，直接保存会把后端已有的密钥全部覆盖成空字符串
+  if (!settingsLoaded.value) {
+    message.error(t('settings.messages.loadFailed'))
+    return
+  }
   settingsSaving.value = true
   try {
     const payload: RuntimeSettings = {

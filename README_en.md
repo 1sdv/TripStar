@@ -107,12 +107,13 @@ graph TD
 
 ## Core Features & Workflow
 
-### 1. Asynchronous Polling System (Solves Gateway Timeout)
+### 1. Asynchronous Task System (Solves Gateway Timeout)
 
 To solve the 504 Gateway Timeout issue caused by long-duration LLM inference, the backend routing mechanism was refactored:
 
-* **`POST /api/trip/plan`**: Instantly returns a `task_id`, pushing the multi-minute inference task into the background via `asyncio.create_task`.
-* **`GET /api/trip/status/{task_id}`**: The frontend makes lightweight polling requests every 3 seconds to get the real-time processing progress (e.g., "🔍 Searching for attractions...") until the status hits `completed`.
+* **`POST /api/trip/plan`**: Instantly returns a `task_id` and `ws_url`, pushing the multi-minute inference task into the background via `asyncio.create_task`.
+* **`WS /api/trip/ws/{task_id}`**: The frontend subscribes to this WebSocket to receive real-time processing progress (e.g., "🔍 Searching for attractions...") until the status hits `completed`.
+* **`GET /api/trip/status/{task_id}`**: Used for reconnection — after a page refresh, laptop sleep or proxy idle timeout, the frontend looks the task up by `task_id` and re-subscribes, so a plan the backend is still working on is never lost.
 
 ### 2. Multi-Agent Architecture (Agentic Workflow)
 
@@ -140,7 +141,7 @@ The frontend renders dynamic Vue structures recursively by reading JSON data:
 * Python 3.10+
 * Node.js 18+
 * Large Model API Key (OpenAI-compatible endpoints highly recommended, e.g., Doubao)
-* AMap Keys (Web Service & Web JS API) with **Security JSCode configured in `index.html`** or Google Maps APIs. If using [Google Maps](https://developers.google.com/maps/apis-by-platform), you must enable: **Geocoding API, Places API (New), Directions API, Maps JavaScript API, and Weather API** in Google Cloud Console, and an active billing account is strictly required.
+* AMap Keys (Web Service & Web JS API) plus the **Security JSCode** paired with the JS API key, supplied via the `VITE_AMAP_SECURITY_JS_CODE` environment variable — or Google Maps APIs. If using [Google Maps](https://developers.google.com/maps/apis-by-platform), you must enable: **Geocoding API, Places API (New), Directions API, Maps JavaScript API, and Weather API** in Google Cloud Console, and an active billing account is strictly required.
 * Xiaohongshu Cookie (Retrieve from browser dev tools after logging in on Web)
 * The `uv` package manager
 
@@ -150,7 +151,7 @@ It is highly recommended to start the project (both frontend and backend) via `d
 
 * The backend does NOT read the `backend/.env` file during container startup. All config is passed via environments setup.
 * `docker-compose.yaml` explicitly maps essential proxies and API keys, supporting variables like `GOOGLE_MAPS_API_KEY` and `GOOGLE_MAPS_PROXY`.
-* Frontend build-time variable `VITE_AMAP_WEB_JS_KEY` is injected via `build.args`.
+* Frontend build-time variables `VITE_AMAP_WEB_JS_KEY` and `VITE_AMAP_SECURITY_JS_CODE` are injected via `build.args`.
 
 **One-Click Start Command:**
 ```bash
@@ -208,7 +209,8 @@ npm install
 cp .env.example .env
 # [Required] VITE_AMAP_WEB_KEY (Same as backend)
 # [Required] VITE_AMAP_WEB_JS_KEY 
-# **MUST ALSO inject Security JSCode in index.html (AMap API v2.0 requirement)**
+# [Required] VITE_AMAP_SECURITY_JS_CODE — Security JSCode required by AMap JS API v2.0.
+#            If empty, AMap rejects the routing plugins and routes degrade to straight lines.
 
 # Run Vite dev server
 npm run dev
