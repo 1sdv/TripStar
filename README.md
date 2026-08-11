@@ -295,6 +295,86 @@ TripStar/
 - [ ] 车程信息
 - [ ] 服务器在线部署
 
+## 🧠 用户偏好记忆模块
+
+TripStar 内置一个**分权重的用户专属旅行偏好记忆库**，带遗忘机制与 TOP-K 限制。开启后，系统会在每次行程生成成功后自动提取用户的稳定旅行偏好并打分入库；下次规划时，高权重偏好会被注入行程规划 Agent 的 Prompt，让推荐越来越贴合用户习惯。
+
+### 快速开启
+
+在 `backend/.env` 中添加：
+
+```env
+ENABLE_USER_MEMORY=true
+MEMORY_USE_SQLITE=true   # 可选，true 为持久化，false 为内存模式（重启丢失）
+```
+
+如使用 SQLite 持久化，请先安装依赖：
+
+```bash
+pip install aiosqlite
+```
+
+### 环境变量配置
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `ENABLE_USER_MEMORY` | `false` | 总开关，默认关闭，不影响现有功能 |
+| `MEMORY_THRESHOLD` | `2.0` | 遗忘阈值，权重衰减低于该值永久删除 |
+| `MIN_INIT_WEIGHT` | `4.0` | 入库准入门槛，LLM 评分低于该值不存入 |
+| `MEMORY_DECAY_FACTOR` | `0.97` | 每日权重衰减系数（0~1，越接近 1 遗忘越慢） |
+| `MEMORY_MAX_RECALL` | `10` | TOP-K，最多注入 Prompt 的记忆条数 |
+| `MEMORY_MAX_SINGLE_CONTENT` | `120` | 单条偏好最大字符长度，超出截断 |
+| `MEMORY_USE_SQLITE` | `false` | `true`=SQLite 持久化；`false`=内存模式 |
+
+### 核心机制
+
+1. **偏好采集**：每次行程生成成功后，后台异步调用 LLM，从「用户原始需求 + 生成行程」中提取稳定偏好并打分（0~10），不阻塞主流程。
+2. **权重体系**：
+   - LLM 自动提取的偏好（`implicit`）初始权重 = LLM 评分，低于 `MIN_INIT_WEIGHT` 直接丢弃；
+   - 用户手动添加的偏好（`explicit`）初始权重 8.5；
+   - 相同偏好重复出现时权重合并（`min(10, 原权重 + 新权重×0.4)`），上限 10.0。
+3. **惰性遗忘**：每次召回时按距上次访问的天数衰减权重（`weight × decay^天数`），低于 `MEMORY_THRESHOLD` 自动删除，无需定时任务。
+4. **Prompt 限流（双层防护）**：召回结果按权重降序取 TOP-K，且单条内容截断长度，防止记忆膨胀撑爆上下文。
+
+### 业务接入链路
+
+- **前端**：首次访问时在 `localStorage` 生成匿名 `user_id`（无需登录），随每次规划请求提交。
+- **规划时**：`trip_planner_agent` 在构建规划 Prompt 时，若该用户有记忆，将偏好片段注入。
+- **完成后**：行程生成成功，后台异步提取偏好写入记忆库。
+
+### 记忆管理接口
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/memory/list?user_id=xxx` | 查询用户有效记忆（已衰减+TOP-K） |
+| POST | `/api/memory/add-explicit?user_id=xxx&content=xxx` | 手动添加偏好 |
+| DELETE | `/api/memory/item?user_id=xxx&memory_id=xxx` | 删除单条记忆 |
+| DELETE | `/api/memory/clear?user_id=xxx` | 清空用户全部记忆 |
+
+### 日志关键字
+
+| 关键字 | 含义 |
+| --- | --- |
+| `[NewMemory]` | 新增一条记忆 |
+| `[MergeMemory]` | 相同偏好合并权重 |
+| `[PrefFilterDrop]` | LLM 评分低于门槛被丢弃 |
+| `[RejectAdd]` | 权重不足被拒绝入库 |
+| `[Forget]` | 权重衰减至阈值以下被遗忘删除 |
+| `[Recall]` / `[BuildPromptSnippet]` | 召回并注入 Prompt |
+
+### 调参参考
+
+- **本地调试**：`MEMORY_USE_SQLITE=false`，内存模式，重启即清空。
+- **生产平衡**：默认值（decay=0.97, threshold=2.0, topk=10），约 30 天不访问的偏好自然遗忘。
+- **快速遗忘**：`MEMORY_DECAY_FACTOR=0.9, MEMORY_THRESHOLD=3.0`，约一周不访问即遗忘。
+
+### 注意事项
+
+- SQLite 模式为单机存储，不支持多实例共享记忆；多实例部署请改用内存模式或外接数据库。
+- `user_id` 由前端生成，清除浏览器缓存即视为新用户。
+- 遗忘为惰性触发（召回时计算），不会主动删除库中长期不访问的数据。
+- TOP-K 只限制注入 Prompt 的条数，不会删除库内记忆。
+
 ## Star History
 
 <a href="https://www.star-history.com/?repos=1sdv%2FTripStar&type=date&logscale=&legend=top-left">

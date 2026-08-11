@@ -119,6 +119,23 @@ export const setRuntimeGoogleMapsApiKey = (value: string): string => {
 
 const getWsBaseUrl = (): string => getRuntimeApiBaseUrl().replace(/^http/i, 'ws').replace(/\/+$/, '')
 
+// ========== 用户记忆：本地生成并持久化匿名 user_id ==========
+const USER_ID_STORAGE_KEY = 'tripstar.user_id'
+
+export const getOrCreateUserId = (): string => {
+  if (typeof window === 'undefined') return ''
+  let uid = window.localStorage.getItem(USER_ID_STORAGE_KEY)
+  if (!uid) {
+    const cryptoObj = window.crypto as Crypto | undefined
+    uid =
+      cryptoObj && typeof cryptoObj.randomUUID === 'function'
+        ? cryptoObj.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    window.localStorage.setItem(USER_ID_STORAGE_KEY, uid)
+  }
+  return uid
+}
+
 const normalizeBackendRuntimeSettings = (
   data?: Partial<BackendRuntimeSettings>
 ): BackendRuntimeSettings => ({
@@ -259,7 +276,8 @@ export async function saveRuntimeSettings(settings: RuntimeSettings): Promise<Ru
  */
 export async function submitTripPlan(formData: TripFormData): Promise<SubmitTripPlanResponse> {
   try {
-    const response = await apiClient.post('/api/trip/plan', formData)
+    const payload = { ...formData, user_id: getOrCreateUserId() }
+    const response = await apiClient.post('/api/trip/plan', payload)
     return response.data
   } catch (error: any) {
     console.error('提交旅行计划失败:', error)
@@ -369,6 +387,40 @@ export async function healthCheck(): Promise<any> {
     console.error('健康检查失败:', error)
     throw new Error(error.message || t('api.healthCheckFailed'))
   }
+}
+
+// ========== 用户偏好记忆管理 ==========
+export interface UserMemoryItem {
+  memory_id: string
+  content: string
+  source: string
+  weight: number
+  create_time: number
+  last_access_time: number
+}
+
+export async function listUserMemory(userId: string): Promise<UserMemoryItem[]> {
+  const response = await apiClient.get('/api/memory/list', { params: { user_id: userId } })
+  return response.data?.data ?? []
+}
+
+export async function addExplicitMemory(userId: string, content: string) {
+  const response = await apiClient.post('/api/memory/add-explicit', null, {
+    params: { user_id: userId, content },
+  })
+  return response.data
+}
+
+export async function clearUserMemory(userId: string) {
+  const response = await apiClient.delete('/api/memory/clear', { params: { user_id: userId } })
+  return response.data
+}
+
+export async function deleteMemoryItem(userId: string, memoryId: string) {
+  const response = await apiClient.delete('/api/memory/item', {
+    params: { user_id: userId, memory_id: memoryId },
+  })
+  return response.data
 }
 
 export default apiClient

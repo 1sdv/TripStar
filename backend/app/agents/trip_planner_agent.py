@@ -518,11 +518,24 @@ class MultiAgentTripPlanner:
             print(f"📋 步骤4: {planning_label}")
             await self._emit_progress(progress_callback, "planning", planning_label, 85)
 
+            # 加载用户历史偏好记忆（若开启）
+            memory_snippet = ""
+            if os.getenv("ENABLE_USER_MEMORY", "false").lower() == "true":
+                user_id = (getattr(request, "user_id", "") or "").strip()
+                if user_id:
+                    try:
+                        from ..memory import MemoryManager
+                        memory_snippet = await MemoryManager.get_instance().build_prompt_snippet(user_id)
+                    except Exception as _mem_err:
+                        print(f"⚠️  加载用户记忆失败: {_mem_err}")
+                        memory_snippet = ""
+
             planner_response = await self._run_planner_with_retry(
                 request,
                 all_attractions,
                 all_weather,
                 all_hotels,
+                memory_snippet,
             )
             print(f"行程规划结果: {planner_response[:300]}...\n")
 
@@ -570,16 +583,18 @@ class MultiAgentTripPlanner:
         attractions: Dict[str, str],
         weather: Dict[str, str],
         hotels: Dict[str, str],
+        memory_snippet: str = "",
     ) -> str:
         """规划阶段使用更长超时，并在超时后重试一次。
-        
+
         Args:
             attractions: {city_name: 景点搜索结果文本}
             weather: {city_name: 天气查询结果文本}
             hotels: {city_name: 酒店搜索结果文本}
+            memory_snippet: 用户历史偏好文本，注入规划 Prompt
         """
         timeout = int(os.getenv("TRIP_PLANNER_TIMEOUT", "180"))
-        planner_query = self._build_planner_query(request, attractions, weather, hotels)
+        planner_query = self._build_planner_query(request, attractions, weather, hotels, memory_snippet)
 
         try:
             return await asyncio.to_thread(
@@ -611,13 +626,15 @@ class MultiAgentTripPlanner:
         attractions: Dict[str, str],
         weather: Dict[str, str],
         hotels: Dict[str, str],
+        memory_snippet: str = "",
     ) -> str:
         """构建行程规划查询（支持多城市）
-        
+
         Args:
             attractions: {city_name: 景点搜索结果文本}
             weather: {city_name: 天气查询结果文本}
             hotels: {city_name: 酒店搜索结果文本}
+            memory_snippet: 用户历史偏好文本
         """
         cities = request.cities
         total_cities = len(cities)
@@ -648,6 +665,11 @@ class MultiAgentTripPlanner:
 - 交通方式: {request.transportation}
 - 住宿: {request.accommodation}
 - 偏好: {', '.join(request.preferences) if request.preferences else '无'}
+"""
+        if memory_snippet:
+            query += f"""
+{memory_snippet}
+请在规划时充分参考以上用户历史偏好，使其在景点选择、餐饮、住宿、行程节奏中体现。
 """
         # 为每个城市附上搜集到的信息
         for cs in cities:

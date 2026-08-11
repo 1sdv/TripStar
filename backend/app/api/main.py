@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from ..config import get_settings, validate_config, print_config
-from .routes import trip, poi, map as map_routes, chat, settings as settings_routes
+from .routes import trip, poi, map as map_routes, chat, settings as settings_routes, memory as memory_routes
 
 # 获取配置
 settings = get_settings()
@@ -58,6 +58,7 @@ app.include_router(poi.router, prefix="/api")
 app.include_router(map_routes.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 app.include_router(settings_routes.router, prefix="/api")
+app.include_router(memory_routes.router, prefix="/api")
 
 
 @app.on_event("startup")

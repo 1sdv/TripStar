@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import traceback
 import uuid
 from datetime import datetime
@@ -318,6 +319,31 @@ async def plan_trip(request: TripRequest):
     }
 
 
+async def _save_preferences_after_trip(user_id: str, request: TripRequest, trip_plan) -> None:
+    """行程生成成功后，异步提取用户偏好并写入记忆库（失败不影响主流程）"""
+    try:
+        from ...memory import MemoryManager, PreferenceExtractor
+
+        user_query = (
+            f"城市: {request.city}; "
+            f"偏好: {', '.join(request.preferences) if request.preferences else '无'}; "
+            f"额外要求: {request.free_text_input or '无'}"
+        )
+        if hasattr(trip_plan, "model_dump"):
+            trip_content = json.dumps(trip_plan.model_dump(mode="json"), ensure_ascii=False)
+        else:
+            trip_content = str(trip_plan)
+
+        extractor = PreferenceExtractor()
+        prefs = await extractor.extract_preferences(user_query, trip_content)
+        mm = MemoryManager.get_instance()
+        for content, score in prefs:
+            await mm.add_memory(user_id, content, source="implicit", init_weight=score)
+        print(f"🧠 用户 {user_id[:8]} 偏好记忆已更新，新增/合并 {len(prefs)} 条")
+    except Exception as e:
+        print(f"⚠️  偏好记忆提取失败: {e}")
+
+
 async def _run_trip_planning(task_id: str, request: TripRequest):
     """后台执行旅行规划并推送进度。"""
     try:
@@ -340,6 +366,11 @@ async def _run_trip_planning(task_id: str, request: TripRequest):
             )
 
         trip_plan = await agent.plan_trip(request, progress_callback=progress_callback)
+
+        # 异步提取用户偏好到记忆库（不阻塞主流程）
+        _user_id = (getattr(request, "user_id", "") or "").strip()
+        if _user_id and os.getenv("ENABLE_USER_MEMORY", "false").lower() == "true":
+            asyncio.create_task(_save_preferences_after_trip(_user_id, request, trip_plan))
 
         await _update_task_state(
             task_id,

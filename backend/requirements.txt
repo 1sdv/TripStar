@@ -15,3 +15,4 @@ huggingface_hub>=0.25.0
 pypinyin>=0.55.0
 PyExecJS>=1.5.1
 requests>=2.31.0
+aiosqlite>=0.20.0
