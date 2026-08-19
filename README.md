@@ -296,14 +296,8 @@ TripStar/
 - [ ] 服务器在线部署
 
 ## Star History
+<img width="869" height="611" alt="image" src="https://github.com/user-attachments/assets/7ca4e182-c3b3-47ac-9797-2e1867130660" />
 
-<a href="https://star-history.dera.page/#1sdv/TripStar&type=date&logscale=&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/image?repos=1sdv/TripStar&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/image?repos=1sdv/TripStar&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://star-history.dera.page/image?repos=1sdv/TripStar&type=date&legend=top-left" />
- </picture>
-</a>
 
 ## 🙏 致谢
 感谢 [linuxdo](https://linux.do/) 社区的交流、分享与反馈，让 TripStar 的迭代更高效，同时欢迎大家进群交流反馈
