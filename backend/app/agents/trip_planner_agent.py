@@ -225,7 +225,7 @@ class MultiAgentTripPlanner:
             )
             self.hotel_agent.add_tool(self._active_tool)
 
-            # 创建行程规划Agent(不需要工具)
+            # 创建行程规划Agent(不需要地图工具)
             print("  - 创建行程规划Agent...")
             self.planner_agent = SimpleAgent(
                 name="行程规划专家",
@@ -233,9 +233,15 @@ class MultiAgentTripPlanner:
                 system_prompt=PLANNER_AGENT_PROMPT
             )
 
+            # ---------- 附加 You.com 联网搜索/研究工具 (可选，与地图供应商无关) ----------
+            self._init_youcom_tool(settings)
+            if self._youcom_tool is not None:
+                self.planner_agent.add_tool(self._youcom_tool)
+
             print(f"✅ 多智能体系统初始化成功 (供应商={self.map_provider})")
             print(f"   天气查询Agent: {len(self.weather_agent.list_tools())} 个工具")
             print(f"   酒店推荐Agent: {len(self.hotel_agent.list_tools())} 个工具")
+            print(f"   行程规划Agent: {len(self.planner_agent.list_tools())} 个工具")
 
         except Exception as e:
             print(f"❌ 多智能体系统初始化失败: {str(e)}")
@@ -364,6 +370,116 @@ class MultiAgentTripPlanner:
 
         self._google_tool = GoogleMapsNativeTool()
         self._active_tool = self._google_tool
+
+    def _init_youcom_tool(self, settings) -> None:
+        """初始化 You.com 联网搜索/深度研究本地适配器工具（可选，需配置 youcom_api_key）。
+
+        与地图供应商 (amap/google) 完全独立、可叠加：不修改、不参与地图供应商的
+        判断逻辑 (self.map_provider)。只有配置了 youcom_api_key 时才创建并挂载
+        此工具，未配置时 self._youcom_tool 为 None，行程规划Agent 行为与接入前
+        完全一致。
+        """
+        if not settings.youcom_api_key:
+            self._youcom_tool = None
+            return
+
+        print("  - 创建 You.com 联网搜索/研究工具...")
+        from ..services.youcom_service import YoucomService
+
+        youcom_svc = YoucomService(api_key=settings.youcom_api_key)
+
+        class YoucomNativeTool:
+            """将 You.com Search/Research API 封装为 hello_agents 可注册的工具。
+
+            通过鸭子类型模拟 MCPTool 的接口（name, description, expandable,
+            _available_tools, run），无需继承任何基类，与 GoogleMapsNativeTool
+            的实现模式保持一致。
+
+            注册后在 Agent 的可用工具列表中暴露为:
+              - youcom_web_search
+              - youcom_research
+            """
+
+            def __init__(self):
+                self.name = "youcom"
+                self.description = "You.com 联网搜索/深度研究服务 (地图数据之外的实时信息)"
+                self.expandable = True
+                self._youcom_svc = youcom_svc
+                # 模拟 MCP 子工具列表，使 hello_agents 能自动展开
+                self._available_tools = [
+                    {
+                        "name": "youcom_web_search",
+                        "description": "You.com 实时联网搜索（活动/开放时间/签证/资讯等地图数据之外的实时信息）",
+                    },
+                    {
+                        "name": "youcom_research",
+                        "description": "You.com 深度研究（复杂行程/多来源综合，附引用）",
+                    },
+                ]
+
+            def get_expanded_tools(self):
+                """返回展开的子工具列表，满足 hello_agents ToolRegistry 的接口要求。"""
+                parent = self
+
+                class _SubTool:
+                    def __init__(self, name, description):
+                        self.name = name
+                        self.description = description
+                        self.expandable = False
+
+                    def run(self, input_data):
+                        return parent.run(input_data)
+
+                    def get_expanded_tools(self):
+                        return [self]
+
+                return [_SubTool(t["name"], t["description"]) for t in self._available_tools]
+
+            def run(self, input_data):
+                """分发 [TOOL_CALL:youcom_*:...] 格式调用。"""
+                import re as _re
+                if isinstance(input_data, dict):
+                    tool_name = input_data.get("tool_name", "")
+                    arguments = input_data.get("arguments", {})
+                elif isinstance(input_data, str):
+                    # 解析 [TOOL_CALL:youcom_xxx:key=val,...] 格式
+                    match = _re.search(
+                        r'\[TOOL_CALL:(\w+):(.*?)\]', input_data
+                    )
+                    if match:
+                        tool_name = match.group(1)
+                        args_str = match.group(2)
+                        arguments = dict(
+                            kv.split("=", 1)
+                            for kv in args_str.split(",")
+                            if "=" in kv
+                        )
+                    else:
+                        return f"无法解析工具调用: {input_data}"
+                else:
+                    return f"不支持的输入类型: {type(input_data)}"
+
+                return self._dispatch(tool_name, arguments)
+
+            def _dispatch(self, tool_name: str, arguments: dict) -> str:
+                try:
+                    if tool_name == "youcom_web_search":
+                        query = arguments.get("query", "")
+                        count = arguments.get("count", 5)
+                        freshness = arguments.get("freshness") or None
+                        country = arguments.get("country") or None
+                        return self._youcom_svc.search(
+                            query, count=count, freshness=freshness, country=country
+                        )
+                    elif tool_name == "youcom_research":
+                        query = arguments.get("query", "")
+                        return self._youcom_svc.research(query)
+                    else:
+                        return f"未知的 You.com 工具: {tool_name}"
+                except Exception as e:
+                    return f"You.com 工具调用失败: {e}"
+
+        self._youcom_tool = YoucomNativeTool()
 
     async def _emit_progress(
         self,
