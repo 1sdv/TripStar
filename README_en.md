@@ -264,13 +264,8 @@ TripStar/
 
 ## Star History
 
-<a href="https://star-history.dera.page/#1sdv/TripStar&type=date&logscale=&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/image?repos=1sdv/TripStar&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/image?repos=1sdv/TripStar&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://star-history.dera.page/image?repos=1sdv/TripStar&type=date&legend=top-left" />
- </picture>
-</a>
+<img width="869" height="611" alt="image" src="https://github.com/user-attachments/assets/d4fa1360-c309-46b0-80fe-bc8fe44f26b1" />
+
 
 ## 🙏 Acknowledgements
 Thanks to the [linux.do](https://linux.do/) community for communication and feedback, making TripStar iterate more efficiently.
