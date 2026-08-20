@@ -14,12 +14,12 @@ COPY frontend/ ./
 
 # 接收构建参数
 ARG VITE_AMAP_WEB_JS_KEY
-ARG VITE_AMAP_WEB_KEY
+ARG VITE_AMAP_SECURITY_JS_CODE
 
 # 设置构建时环境变量：API 使用相对路径(同源部署)
 ENV VITE_API_BASE_URL=""
 ENV VITE_AMAP_WEB_JS_KEY=${VITE_AMAP_WEB_JS_KEY:-your_amap_web_js_api_key_here}
-ENV VITE_AMAP_WEB_KEY=${VITE_AMAP_WEB_KEY:-your_amap_web_api_key_here}
+ENV VITE_AMAP_SECURITY_JS_CODE=${VITE_AMAP_SECURITY_JS_CODE:-your_amap_security_js_code_here}
 
 # 跳过 vue-tsc 类型检查，直接构建（类型错误不影响运行）
 RUN npx vite build

@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_AMAP_WEB_JS_KEY: ${VITE_AMAP_WEB_JS_KEY:-your_amap_web_js_api_key_here}
-        VITE_AMAP_WEB_KEY: ${VITE_AMAP_WEB_KEY:-your_amap_web_api_key_here}
+        VITE_AMAP_SECURITY_JS_CODE: ${VITE_AMAP_SECURITY_JS_CODE:-your_amap_security_js_code_here}
     container_name: helloagents-trip-planner
     ports:
       - "7860:7860"
@@ -18,6 +18,13 @@ services:
       - XHS_COOKIE=${XHS_COOKIE:-your_xhs_cookie_here}
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
       - GOOGLE_MAPS_PROXY=${GOOGLE_MAPS_PROXY:-}
+      - ENABLE_USER_MEMORY=${ENABLE_USER_MEMORY:-false}
+      - MEMORY_THRESHOLD=${MEMORY_THRESHOLD:-2.0}
+      - MIN_INIT_WEIGHT=${MIN_INIT_WEIGHT:-4.0}
+      - MEMORY_DECAY_FACTOR=${MEMORY_DECAY_FACTOR:-0.97}
+      - MEMORY_MAX_RECALL=${MEMORY_MAX_RECALL:-10}
+      - MEMORY_MAX_SINGLE_CONTENT=${MEMORY_MAX_SINGLE_CONTENT:-120}
+      - MEMORY_USE_SQLITE=${MEMORY_USE_SQLITE:-false}
       - HOST=0.0.0.0
       - PORT=7860
       - LOG_LEVEL=INFO
