@@ -98,6 +98,7 @@ export interface TripFormData {
   preferences: string[]
   free_text_input: string
   language?: string
+  user_id?: string
 }
 
 export interface TripPlanResponse {

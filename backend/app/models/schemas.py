@@ -25,6 +25,7 @@ class TripRequest(BaseModel):
     preferences: List[str] = Field(default=[], description="旅行偏好标签", example=["历史文化", "美食"])
     free_text_input: Optional[str] = Field(default="", description="额外要求", example="希望多安排一些博物馆")
     language: Optional[str] = Field(default="zh", description="输出语言(zh/en/ja)", example="en")
+    user_id: Optional[str] = Field(default="", description="用户唯一标识(前端生成,用于记忆库)")
 
     @model_validator(mode='after')
     def normalize_cities(self):
