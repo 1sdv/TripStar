@@ -41,6 +41,7 @@ Unlike traditional travel guide websites, this project adopts an innovative mode
 * **Knowledge Graph Visualization**: Real-time conversion of generated itinerary data into a node-relationship graph, intuitively displaying the spatial structure of "City - Days - Itinerary Nodes - Budget".
 * **Immersive AI Q&A Companion**: After generating the report, provides a floating AI Q&A window (bottom left). The AI retains complete contextual memory of the itinerary, allowing users to ask follow-up questions at any time regarding itinerary details (like ticket prices, or suitability).
 * **Multi-City Trip Planning**: Plan trips spanning multiple cities in one journey. Dynamically add cities with individual stay durations, and the system auto-calculates the total travel days. Inter-city transfer days are smartly annotated with transportation suggestions, the budget panel tracks inter-city transport costs separately, the weather panel displays forecasts per city, and the knowledge graph renders the full multi-city route topology.
+* **User Preference Memory**: Built-in weighted per-user travel preference memory with decay and TOP-K recall. When enabled, TripStar extracts stable preferences after successful itinerary generation, scores and stores them, then injects high-weight memories into future Agent prompts so recommendations become more aligned with the user's habits.
 * **Luxury Dark Glassmorphism Design**: A completely redesigned Dark Luxury Glassmorphism UI, offering a highly immersive, premium visual experience.
 
 ---
@@ -140,17 +141,36 @@ The frontend renders dynamic Vue structures recursively by reading JSON data:
 * Python 3.10+
 * Node.js 18+
 * Large Model API Key (OpenAI-compatible endpoints highly recommended, e.g., Doubao)
-* AMap Keys (Web Service & Web JS API) with **Security JSCode configured in `index.html`** or Google Maps APIs. If using [Google Maps](https://developers.google.com/maps/apis-by-platform), you must enable: **Geocoding API, Places API (New), Directions API, Maps JavaScript API, and Weather API** in Google Cloud Console, and an active billing account is strictly required.
+* AMap Keys: Web Service Key for backend REST services, Web JS API Key for frontend map rendering, and AMap JS API 2.0 Security JSCode. The Security JSCode is still required, but it should be filled in `.env` / the Docker root `.env` as `VITE_AMAP_SECURITY_JS_CODE`; Vite replaces the placeholder in `index.html` during frontend dev/build. Do not hard-code the real secret directly in `index.html`. If using [Google Maps](https://developers.google.com/maps/apis-by-platform), you must enable: **Geocoding API, Places API (New), Directions API, Maps JavaScript API, and Weather API** in Google Cloud Console, and an active billing account is strictly required.
 * Xiaohongshu Cookie (Retrieve from browser dev tools after logging in on Web)
 * The `uv` package manager
 
 ### Docker / Compose Conventions
 
-It is highly recommended to start the project (both frontend and backend) via `docker-compose`. Ensure your `.env` variables are configured before starting:
+It is highly recommended to start the project (both frontend and backend) via `docker-compose`. Copy the root config template first and fill your `.env` variables before starting:
+
+```bash
+cp .env.example .env
+```
 
 * The backend does NOT read the `backend/.env` file during container startup. All config is passed via environments setup.
-* `docker-compose.yaml` explicitly maps essential proxies and API keys, supporting variables like `GOOGLE_MAPS_API_KEY` and `GOOGLE_MAPS_PROXY`.
-* Frontend build-time variable `VITE_AMAP_WEB_JS_KEY` is injected via `build.args`.
+* `docker-compose.yaml` explicitly maps essential proxies and API keys, supporting variables like `GOOGLE_MAPS_API_KEY` and `GOOGLE_MAPS_PROXY`. `GOOGLE_MAPS_PROXY` is used only by backend Google Maps services; it does not affect LLM, Xiaohongshu, or AMap requests.
+* Frontend build-time variables `VITE_AMAP_WEB_JS_KEY` and `VITE_AMAP_SECURITY_JS_CODE` are injected via `build.args`; rebuild the image after changing them.
+* The frontend settings page can update backend runtime settings such as LLM, Xiaohongshu, AMap Web Service Key, and Google Maps key/proxy. Secret values are masked in API responses, and saving a masked value keeps the original secret unchanged.
+
+Root `.env` example:
+
+```env
+LLM_API_KEY=your_api_key
+LLM_BASE_URL=https://your-openai-compatible-endpoint/v1
+LLM_MODEL_ID=your_model
+XHS_COOKIE="a1=xxx; web_session=xxx"
+VITE_AMAP_WEB_KEY=your_amap_web_service_key
+VITE_AMAP_WEB_JS_KEY=your_amap_web_js_key
+VITE_AMAP_SECURITY_JS_CODE=your_amap_security_js_code
+GOOGLE_MAPS_API_KEY=
+GOOGLE_MAPS_PROXY=
+```
 
 **One-Click Start Command:**
 ```bash
@@ -186,9 +206,10 @@ uv pip install -r requirements.txt
 # Copy config and fill your API KEYs
 cp .env.example .env
 # [Required] LLM_API_KEY, LLM_BASE_URL, LLM_MODEL_ID (pick a model good at JSON struct)
-# [Optional] VITE_AMAP_WEB_KEY
+# [Required] VITE_AMAP_WEB_KEY (AMap Web Service Key for backend REST services)
 # [Required] XHS_COOKIE
-# [Required] GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_PROXY
+# [Optional] GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_PROXY
+#            GOOGLE_MAPS_PROXY applies only to backend Google Maps services.
 
 # Start FastAPI (Uvicorn recommended)
 uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload
@@ -206,9 +227,9 @@ npm install
 
 # Copy config and fill your Keys
 cp .env.example .env
-# [Required] VITE_AMAP_WEB_KEY (Same as backend)
-# [Required] VITE_AMAP_WEB_JS_KEY 
-# **MUST ALSO inject Security JSCode in index.html (AMap API v2.0 requirement)**
+# [Required] VITE_AMAP_WEB_JS_KEY
+# [Required] VITE_AMAP_SECURITY_JS_CODE
+# [Optional] VITE_API_BASE_URL defaults to http://localhost:8000; leave empty for same-origin deployment.
 
 # Run Vite dev server
 npm run dev
@@ -236,7 +257,7 @@ TripStar/
 │   │   ├── views/                 # Views (Home.vue; Result.vue)
 │   │   ├── components/            # UI components
 │   │   └── services/              # Async polling & retries
-│   ├── index.html                 # Index Entry & AMap Token injection
+│   ├── index.html                 # Index entry & AMap Security JSCode placeholder
 │   ├── .env                       # Frontend Local Env
 │   └── package.json
 │

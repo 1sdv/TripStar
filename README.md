@@ -43,6 +43,7 @@
 * **知识图谱可视化**: 将生成的行程数据实时转换为节点关系图，直观展示"城市-天数-行程节点-预算"的空间结构。
 * **沉浸式伴游 AI 问答**: 在生成报告后，提供悬浮式 AI 问答窗口（左下角），AI 拥有完整行程的上下文记忆，用户可随时针对行程细节（如票价、适宜性）进行追问。
 * **多城市行程规划**: 支持在一次旅行中规划多个城市，动态添加城市并设置停留天数，系统自动计算总行程天数。城际移动日智能标注交通建议，预算面板独立统计城际交通费用，天气面板按城市分别展示，知识图谱以多城市拓扑呈现完整路线。
+* **用户偏好记忆模块**: 内置分权重的用户专属旅行偏好记忆库，支持遗忘机制与 TOP-K 召回。开启后会在行程生成成功后自动提取稳定偏好并打分入库，下次规划时将高权重偏好注入 Agent Prompt，让推荐持续贴合用户习惯。
 * **奢华暗黑玻璃拟物风**: 全新设计的暗黑系玻璃拟物化 (Dark Luxury Glassmorphism) 界面，提供极具沉浸感的高级视觉体验。
 ---
 > 举个例子要去中国——西安玩耍，只需要填写地点、日期、偏好设置，即可等待行程规划的结果，一眼预览如何安排旅游景点
@@ -166,20 +167,36 @@ sequenceDiagram
 * Python 3.10+
 * Node.js 18+
 * 大模型 API Key（推荐使用兼容 OpenAI 格式的服务商，如豆包）
-* 高德地图两种key： Web服务 、 Web端(JS API) (其**安全密钥 JSCode**配置在index.html中)（[高德api](https://lbs.amap.com/)）
+* 高德地图两种 Key：Web 服务 Key（后端 REST 服务）与 Web端(JS API) Key（前端地图渲染）。AMap JS API 2.0 的安全密钥 JSCode 仍然必须填写，但填写到 `.env` / Docker 根目录 `.env` 的 `VITE_AMAP_SECURITY_JS_CODE`，构建或启动前端开发服务时会自动替换 `index.html` 里的占位符，不要把真实密钥直接手写进 `index.html`。（[高德 API](https://lbs.amap.com/)）
 * [Google Maps API Key](https://developers.google.com/maps/apis-by-platform)（若要使用 Google 地图引擎，必须在 Google Cloud 控制台中开通：**Geocoding API, Places API (New), Directions API, Maps JavaScript API, Weather API**，需要绑卡）
 * 小红书Cookie（[小红书](https://www.xiaohongshu.com/) 网页端登录后从浏览器开发者工具复制）
 * 安装 `uv` 包管理器
 
 ### Docker / Compose 配置约定
 
-推荐通过 docker-compose 一键启动项目（包含前端和后端环境），在运行之前，确保填补 `.env` 文件相关的环境变量：
+推荐通过 docker-compose 一键启动项目（包含前端和后端环境），在运行之前，先复制根目录配置模板并填补 `.env` 里的环境变量：
+
+```bash
+cp .env.example .env
+```
 
 * 容器启动时不再读取项目目录里的 `backend/.env`，请确保将配置以环境变量的形式传入。
-* `docker-compose.yaml` 中显式配置了必要的运行时代理和 API keys，支持传入 `GOOGLE_MAPS_API_KEY` 与 `GOOGLE_MAPS_PROXY` 等变量。
-* 前端构建期变量 `VITE_AMAP_WEB_JS_KEY` 会通过 `build.args` 自动注入前端。
+* `docker-compose.yaml` 中显式配置了必要的运行时代理和 API keys，支持传入 `GOOGLE_MAPS_API_KEY` 与 `GOOGLE_MAPS_PROXY` 等变量；其中 `GOOGLE_MAPS_PROXY` 只用于后端 Google Maps 服务，不会影响 LLM、小红书或高德请求。
+* 前端构建期变量 `VITE_AMAP_WEB_JS_KEY` 与 `VITE_AMAP_SECURITY_JS_CODE` 会通过 `build.args` 自动注入前端；修改后需要重新构建镜像。
+* 前端设置页可修改后端运行时配置（LLM、小红书、高德 Web 服务 Key、Google Maps Key/代理等）。敏感字段会被遮罩返回，保存遮罩值时后端会保持原密钥不变。
 
+根目录 `.env` 示例：
 
+```env
+LLM_API_KEY=your_api_key
+LLM_BASE_URL=https://your-openai-compatible-endpoint/v1
+LLM_MODEL_ID=your_model
+XHS_COOKIE="a1=xxx; web_session=xxx"
+VITE_AMAP_WEB_KEY=your_amap_web_service_key
+VITE_AMAP_WEB_JS_KEY=your_amap_web_js_key
+VITE_AMAP_SECURITY_JS_CODE=your_amap_security_js_code
+GOOGLE_MAPS_API_KEY=
+GOOGLE_MAPS_PROXY=
 ```
 
 本地开发仍可按下面步骤分别配置和启动 `backend/.env` 和 `frontend/.env`。
@@ -210,6 +227,7 @@ cp .env.example .env
 # [必填] VITE_AMAP_WEB_KEY (高德地图 web服务 类型的key)
 # [必填] XHS_COOKIE（小红书网页端登录后的Cookie）
 # [选填] GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_PROXY（如果需要支持 Google 地图引擎）
+#         GOOGLE_MAPS_PROXY 只作用于 Google Maps 后端服务，不影响 LLM/小红书/高德。
 
 # 启动 FastAPI (推荐通过 uvicorn)
 uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload
@@ -228,9 +246,9 @@ npm install
 
 # 复制配置文件并填入相应的 Key
 cp .env.example .env
-# [必填] VITE_AMAP_WEB_KEY 与后端保持一致
 # [必填] VITE_AMAP_WEB_JS_KEY 必须是 Web端(JS API) 类型的key
-# 另外，由于 JS API 2.0 政策要求，**还需要在 index.html 注入你的安全密钥(securityJsCode)**
+# [必填] VITE_AMAP_SECURITY_JS_CODE 为 Web端(JS API) 安全密钥 JSCode
+# [可选] VITE_API_BASE_URL 默认为 http://localhost:8000；同源部署可留空
 
 # 启动 Vite 开发服务器
 npm run dev
@@ -260,7 +278,7 @@ TripStar/
 │   │   ├── views/                 # 主路由视图 (Home.vue 表单输入; Result.vue 路书展示)
 │   │   ├── components/            # 独立复用的 UI / 背景组件
 │   │   └── services/              # Axios 异步轮询及配置重试逻辑 (api.ts)
-│   ├── index.html                 # 入口挂载及高德地图 SecurityKey 预设
+│   ├── index.html                 # 入口挂载及高德地图 SecurityKey 占位符
 │   ├── .env                       # 本地前端开发环境变量（Docker 构建时忽略）
 │   └── package.json
 │

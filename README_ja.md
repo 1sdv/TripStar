@@ -41,6 +41,7 @@
 * **ナレッジグラフの可視化**: 生成された旅程データをリアルタイムでノードとリレーションシップのグラフに変換し、「都市 - 日数 - 旅程ノード - 予算」の空間構造を直感的に表示します。
 * **没入型 AI Q&A コンパニオン**: 報告書の生成後、左下にフローティングの AI Q&A ウィンドウが提供されます。AI は完全な旅程のコンテキスト情報を保持しており、ユーザーはいつでもチケット料金やルートの適しさなどの旅程の詳細について質問できます。
 * **マルチシティ旅行計画**: 一度の旅行で複数の都市を計画できます。都市を動的に追加し、それぞれの滞在日数を設定すると、システムが自動で総旅行日数を計算します。都市間移動日には交通手段の提案がスマートに表示され、予算パネルでは都市間交通費が別途集計され、天気パネルは都市ごとに表示され、ナレッジグラフはマルチシティのトポロジーを完全に表現します。
+* **ユーザー嗜好メモリ**: 重み付きのユーザー専用旅行嗜好メモリを内蔵し、忘却メカニズムと TOP-K 召回に対応します。有効化すると、旅程生成後に安定した嗜好を自動抽出・採点して保存し、次回以降の Agent Prompt に高重みの嗜好を注入することで、推薦をユーザー習慣に継続的に近づけます。
 * **ラグジュアリーなダークグラスモーフィズムデザイン**: 新しく設計されたダークグラスモーフィズム (Dark Luxury Glassmorphism) アプリのインターフェースにより、没入感のあるハイエンドな視覚体験を提供します。
 
 ---
@@ -52,17 +53,36 @@
 * Python 3.10+
 * Node.js 18+
 * 大規模言語モデル API キー（OpenAIと互換性のあるものを推奨。Doubao など）
-* 高徳マップ (AMap) のキー（Web Service または Web JS API。`index.html` にセキュリティJSCodeの設定が必要）または Google Maps API のキー。Google Mapsを使用する場合、Google Cloudコンソールで **Geocoding API, Places API (New), Directions API, Maps JavaScript API, Weather API** を必ず有効にし、有効な課金アカウント（クレジットカード）をリンクする必要があります。
+* 高徳マップ (AMap) のキー：バックエンド REST サービス用の Web Service Key、フロントエンド地図表示用の Web JS API Key、AMap JS API 2.0 用の Security JSCode。Security JSCode は必須ですが、`.env` / Docker ルート `.env` の `VITE_AMAP_SECURITY_JS_CODE` に記入してください。フロントエンドの dev/build 時に Vite が `index.html` のプレースホルダーを自動置換します。実際のキーを `index.html` に直接ハードコードしないでください。Google Mapsを使用する場合、Google Cloudコンソールで **Geocoding API, Places API (New), Directions API, Maps JavaScript API, Weather API** を必ず有効にし、有効な課金アカウント（クレジットカード）をリンクする必要があります。
 * Xiaohongshu の Cookie（ブラウザにログイン後、DevToolsで取得）
 * `uv` パッケージマネージャーのインストール
 
 ### Docker / Compose 構成の規約
 
-docker-compose を介してプロジェクト（フロントエンドおよびバックエンドの両方）をワン・クリックで開始することを強く推奨します。起動する前に `.env` ファイルに適切な変数が設定されていることを確認してください。
+docker-compose を介してプロジェクト（フロントエンドおよびバックエンドの両方）をワン・クリックで開始することを強く推奨します。まずルートの設定テンプレートをコピーし、起動前に `.env` の変数を設定してください。
+
+```bash
+cp .env.example .env
+```
 
 * コンテナーの起動時にバックエンドは `backend/.env` を読み取りません。構成は常に環境変数で渡してください。
-* `docker-compose.yaml` は本番プロキシや API キーの設定（例：`GOOGLE_MAPS_API_KEY`、`GOOGLE_MAPS_PROXY` の引き渡し）をサポートします。
-* フロントエンドのビルド時変数 `VITE_AMAP_WEB_JS_KEY` は `build.args` 経由で注入されます。
+* `docker-compose.yaml` は本番プロキシや API キーの設定（例：`GOOGLE_MAPS_API_KEY`、`GOOGLE_MAPS_PROXY` の引き渡し）をサポートします。`GOOGLE_MAPS_PROXY` はバックエンドの Google Maps サービス専用で、LLM、Xiaohongshu、高徳リクエストには影響しません。
+* フロントエンドのビルド時変数 `VITE_AMAP_WEB_JS_KEY` と `VITE_AMAP_SECURITY_JS_CODE` は `build.args` 経由で注入されます。変更後はイメージの再ビルドが必要です。
+* フロントエンドの設定画面から、LLM、Xiaohongshu、高徳 Web Service Key、Google Maps Key/プロキシなどのバックエンド実行時設定を更新できます。機密値は API レスポンスではマスクされ、マスク値のまま保存した場合は既存の値が保持されます。
+
+ルート `.env` の例：
+
+```env
+LLM_API_KEY=your_api_key
+LLM_BASE_URL=https://your-openai-compatible-endpoint/v1
+LLM_MODEL_ID=your_model
+XHS_COOKIE="a1=xxx; web_session=xxx"
+VITE_AMAP_WEB_KEY=your_amap_web_service_key
+VITE_AMAP_WEB_JS_KEY=your_amap_web_js_key
+VITE_AMAP_SECURITY_JS_CODE=your_amap_security_js_code
+GOOGLE_MAPS_API_KEY=
+GOOGLE_MAPS_PROXY=
+```
 
 **ワンストップの起動コマンド:**
 ```bash
@@ -96,9 +116,10 @@ uv pip install -r requirements.txt
 # .env に API KEY などを記入
 cp .env.example .env
 # [必須] LLM_API_KEY, LLM_BASE_URL, LLM_MODEL_ID
-# [任意] VITE_AMAP_WEB_KEY 
+# [必須] VITE_AMAP_WEB_KEY（バックエンド REST サービス用の高徳 Web Service Key）
 # [必須] XHS_COOKIE
-# [必須] GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_PROXY
+# [任意] GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_PROXY
+#        GOOGLE_MAPS_PROXY はバックエンド Google Maps サービス専用です。
 
 # FastAPIを起動 
 uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload
@@ -115,9 +136,9 @@ npm install
 
 # 設定ファイルをコピーし、Key を記入
 cp .env.example .env
-# [必須] VITE_AMAP_WEB_KEY
 # [必須] VITE_AMAP_WEB_JS_KEY
-# フロントエンド用に `index.html` へ 高徳Security JSCodeの注入が必要なことに注意
+# [必須] VITE_AMAP_SECURITY_JS_CODE
+# [任意] VITE_API_BASE_URL。デフォルトは http://localhost:8000。同一オリジン配信では空でも可。
 
 # Viteサーバーの起動
 npm run dev
