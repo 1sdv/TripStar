@@ -83,7 +83,7 @@ sequenceDiagram
             
             loop Fill coordinates for each refined attraction
                 XHS->>Maps: geocode_unified(name, city)
-                Note right of Maps: Google geocoding first; fallback to AMap REST on failure
+                Note right of Maps: Google geocoding first, fallback to AMap REST on failure
                 Maps-->>XHS: Coordinates {longitude, latitude}
             end
             XHS-->>Planner: Return assembled Xiaohongshu attraction candidates
@@ -111,7 +111,7 @@ sequenceDiagram
     end
 
     Planner->>KG: build_knowledge_graph(trip_plan, lang)
-    Note right of KG: Extract nodes and edges for cities, days, attractions, budget, and suggestions; translate labels by language
+    Note right of KG: Extract nodes and edges for cities, days, attractions, budget, and suggestions, then translate labels by language
     KG-->>Planner: graph_data (nodes, edges, categories)
 
     Planner-->>Route: Return full TripPlanResponse structure
