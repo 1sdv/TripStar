@@ -75,6 +75,8 @@ class XhsNativeClient:
 
     def __init__(self, cookies_str: str):
         self.cookies_str = cookies_str
+        self._session = requests.Session()
+        self._session.trust_env = False
 
     def search_notes(self, keyword: str, page: int = 1, sort_type: int = 0,
                      page_size: int = 20) -> dict:
@@ -122,7 +124,7 @@ class XhsNativeClient:
         headers, cookies, serialized_data = generate_request_params(
             self.cookies_str, api, data, "POST"
         )
-        response = requests.post(
+        response = self._session.post(
             self.BASE_URL + api,
             headers=headers,
             data=serialized_data.encode("utf-8"),
@@ -167,7 +169,7 @@ class XhsNativeClient:
         headers, cookies, serialized_data = generate_request_params(
             self.cookies_str, api, data, "POST"
         )
-        response = requests.post(
+        response = self._session.post(
             self.BASE_URL + api,
             headers=headers,
             data=serialized_data,
@@ -211,7 +213,7 @@ def _geocode_amap_raw(address: str, city: str) -> dict:
 
     url = f"https://restapi.amap.com/v3/place/text?keywords={address}&city={city}&offset=1&key={settings.vite_amap_web_key}"
     try:
-        resp = httpx.get(url, timeout=5)
+        resp = httpx.get(url, timeout=5, trust_env=False)
         data = resp.json()
         if data.get("status") == "1" and data.get("pois") and len(data["pois"]) > 0:
             location = data["pois"][0]["location"]
@@ -245,7 +247,7 @@ def get_note_detail_ssr(note_id: str) -> dict:
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
     try:
-        resp = httpx.get(url, headers=headers, timeout=8)
+        resp = httpx.get(url, headers=headers, timeout=8, trust_env=False)
         match = re.search(r'window\.__INITIAL_STATE__=({.*?})</script>', resp.text)
         if match:
             state_json = json.loads(match.group(1).replace('undefined', 'null'))
@@ -454,7 +456,7 @@ def get_xhs_photo_sync(keyword: str) -> str:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
-        resp = httpx.get(url, headers=headers, timeout=10)
+        resp = httpx.get(url, headers=headers, timeout=10, trust_env=False)
 
         match = re.search(r'window\.__INITIAL_STATE__=({.*?})</script>', resp.text)
         if match:

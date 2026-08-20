@@ -30,8 +30,8 @@ class GoogleMapService:
     def __init__(self, api_key: str, proxy: str = ""):
         self.api_key = api_key
         # 创建带代理的持久化 HTTP 客户端
-        # httpx 原生支持 http/https/socks5 代理
-        client_kwargs: Dict[str, Any] = {"timeout": 15}
+        # 仅使用显式传入的 Google Maps 代理，不继承系统环境代理
+        client_kwargs: Dict[str, Any] = {"timeout": 15, "trust_env": False}
         if proxy:
             client_kwargs["proxy"] = proxy
             print(f"  - Google Maps 代理已配置: {proxy}")
@@ -296,4 +296,3 @@ def reset_google_map_service() -> None:
     if _google_map_service is not None:
         _google_map_service.close()
     _google_map_service = None
-

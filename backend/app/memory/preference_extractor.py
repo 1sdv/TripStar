@@ -93,7 +93,7 @@ class PreferenceExtractor:
         url = f"{cfg['base_url']}/chat/completions"
 
         try:
-            async with httpx.AsyncClient(timeout=cfg["timeout"]) as client:
+            async with httpx.AsyncClient(timeout=cfg["timeout"], trust_env=False) as client:
                 resp = await client.post(url, json=payload, headers=headers)
                 resp.raise_for_status()
                 data = resp.json()

@@ -2,14 +2,68 @@
 
 import os
 
-from hello_agents import HelloAgentsLLM
+import httpx
+from openai import OpenAI
 from ..config import get_settings
 
 # 全局LLM实例
 _llm_instance = None
 
 
-def get_llm() -> HelloAgentsLLM:
+def _clear_system_proxy_env() -> None:
+    """清理系统级代理环境变量，避免 LLM / 其他非 Google 服务误继承代理配置。"""
+    for key in (
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+    ):
+        os.environ.pop(key, None)
+
+
+class DirectOpenAILLM:
+    """轻量 LLM 适配器，避免 HelloAgentsLLM 构造阶段自动继承系统代理。"""
+
+    def __init__(self, model: str, api_key: str, base_url: str, timeout: int):
+        self.provider = "openai-compatible"
+        self.model = model
+        self.api_key = api_key
+        self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
+        self._client = OpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            timeout=self.timeout,
+            http_client=httpx.Client(
+                timeout=self.timeout,
+                trust_env=False,
+            ),
+            default_headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+        )
+
+    def invoke(self, messages, **kwargs):
+        """兼容 HelloAgentsLLM 的核心接口，返回纯文本内容。"""
+        response = self._client.chat.completions.create(
+            model=kwargs.get("model", self.model),
+            messages=messages,
+            temperature=kwargs.get("temperature", 0.7),
+            max_tokens=kwargs.get("max_tokens"),
+            top_p=kwargs.get("top_p"),
+            stop=kwargs.get("stop"),
+        )
+        choice = response.choices[0]
+        content = getattr(choice.message, "content", None) or ""
+        return content
+
+    def __call__(self, messages, **kwargs):
+        return self.invoke(messages, **kwargs)
+
+
+def get_llm() -> DirectOpenAILLM:
     """
     获取LLM实例(单例模式)
     
@@ -20,6 +74,7 @@ def get_llm() -> HelloAgentsLLM:
     
     if _llm_instance is None:
         settings = get_settings()
+        _clear_system_proxy_env()
 
         api_key = (
             settings.openai_api_key
@@ -41,23 +96,11 @@ def get_llm() -> HelloAgentsLLM:
         )
         timeout = int(os.getenv("LLM_TIMEOUT", "60"))
 
-        _llm_instance = HelloAgentsLLM(
+        _llm_instance = DirectOpenAILLM(
             model=model,
             api_key=api_key,
             base_url=base_url,
             timeout=timeout,
-        )
-        
-        # 【关键修复】：针对第三方中转API可能开启了 Cloudflare/WAF 拦截 Python 默认爬虫特征的情况
-        # 我们手动覆盖底层的 OpenAI client，加入伪装的浏览器 User-Agent
-        from openai import OpenAI
-        _llm_instance._client = OpenAI(
-            api_key=_llm_instance.api_key,
-            base_url=_llm_instance.base_url,
-            timeout=_llm_instance.timeout,
-            default_headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            }
         )
         
         print(f"✅ LLM服务初始化成功")

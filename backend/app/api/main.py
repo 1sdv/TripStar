@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from ..config import get_settings, validate_config, print_config
-from .routes import trip, poi, map as map_routes, chat, settings as settings_routes, memory as memory_routes
+from .routes import trip, poi, map as map_routes, chat, settings as settings_routes, memory_routes
 
 # 获取配置
 settings = get_settings()
