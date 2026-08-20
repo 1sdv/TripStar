@@ -202,6 +202,7 @@
       "editConfirm": "「{name}」の価格を ¥{amount} に変更しますか？"
     },
     "mapTitle": "観光地マップ",
+    "refreshMap": "地図を更新",
     "graphTitle": "旅行ナレッジグラフ",
     "dailyTitle": "日別プラン",
     "dayDescription": "プラン説明:",

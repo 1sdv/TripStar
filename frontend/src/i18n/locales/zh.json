@@ -202,6 +202,7 @@
       "editConfirm": "确认将「{name}」价格改为 ¥{amount} 吗？"
     },
     "mapTitle": "景点地图",
+    "refreshMap": "刷新地图",
     "graphTitle": "旅行知识图谱",
     "dailyTitle": "每日行程",
     "dayDescription": "行程描述:",

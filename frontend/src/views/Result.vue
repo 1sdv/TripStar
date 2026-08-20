@@ -32,6 +32,9 @@
 
           <div class="top-switch-actions">
             <a-space size="middle" wrap>
+              <a-button type="default" :loading="mapRefreshing" @click="refreshMap">
+                {{ t('result.refreshMap') }}
+              </a-button>
               <a-button v-if="!editMode" @click="toggleEditMode" type="default">
                 {{ t('result.editTrip') }}
               </a-button>
@@ -604,6 +607,7 @@ const activeSection = ref('overview')
 const activeDays = ref<number[]>([0]) // 默认展开第一天
 const activeOverviewCard = ref(1)
 const overviewSwiperContainerRef = ref<HTMLElement | null>(null)
+const mapRefreshing = ref(false)
 let map: any = null
 let googleMap: google.maps.Map | null = null
 let googleMarkers: google.maps.Marker[] = []
@@ -982,6 +986,21 @@ const ensureMapReady = async () => {
   await initMap()
 }
 
+const refreshMap = async () => {
+  if (mapRefreshing.value) return
+  mapRefreshing.value = true
+  try {
+    destroyCurrentMap()
+    await nextTick()
+    await initMap()
+  } catch (error) {
+    console.error('刷新地图失败:', error)
+    message.error(t('result.messages.mapLoadFailed'))
+  } finally {
+    mapRefreshing.value = false
+  }
+}
+
 const handleRuntimeSettingsUpdated = () => {
   destroyCurrentMap()
   if (activeSection.value === 'map') {
@@ -1353,11 +1372,10 @@ const saveChanges = () => {
   message.success(t('result.messages.changesSaved'))
 
   // 重新初始化地图以反映更改
-  destroyCurrentMap()
   if (activeSection.value === 'map') {
-    nextTick(() => {
-      initMap()
-    })
+    void refreshMap()
+  } else {
+    destroyCurrentMap()
   }
 }
 
