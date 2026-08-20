@@ -290,7 +290,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
@@ -299,7 +299,6 @@ import { getCurrentLocale } from '@/i18n'
 import NavBar from '@/components/NavBar.vue'
 import type { TripFormData, TripTaskEvent, TripHistoryItem, CityStay } from '@/types'
 import type { Dayjs } from 'dayjs'
-import dayjs from 'dayjs'
 
 type LandingFormData = {
   cities: Array<{ city: string; days: number }>

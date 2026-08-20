@@ -15,8 +15,10 @@
 <body>
   <div id="app"></div>
   <script type="text/javascript">
+    // 高德 JS API 2.0 的安全密钥。构建时由 VITE_AMAP_SECURITY_JS_CODE 注入；
+    // 未配置时为空串，避免把占位符字面量传给高德 SDK。
     window._AMapSecurityConfig = {
-      securityJsCode: 'your_vite_amap_web_js_security_key'
+      securityJsCode: '%VITE_AMAP_SECURITY_JS_CODE%'
     }
   </script>
   <script type="module" src="/src/main.ts"></script>

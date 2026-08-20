@@ -590,6 +590,7 @@ import {
   getRuntimeApiBaseUrl,
   getRuntimeMapJsKey,
   getRuntimeGoogleMapsApiKey,
+  setRuntimeGoogleMapsApiKey,
   getBackendRuntimeSettings,
   pollTaskStatus,
   RUNTIME_SETTINGS_UPDATED_EVENT,
@@ -616,6 +617,7 @@ let googleInfoWindows: google.maps.InfoWindow[] = []
 let googleDirectionsRenderers: google.maps.DirectionsRenderer[] = []
 const mapProviderType = ref<'google' | 'amap'>('amap')
 let overviewSwiper: Swiper | null = null
+let mapInitGeneration = 0
 
 type OverviewAttractionItem = {
   name: string
@@ -2541,6 +2543,8 @@ const searchRoutePath = (
 
 // 初始化地图入口
 const initMap = async () => {
+  const generation = ++mapInitGeneration
+
   // 1. 先尝试从 localStorage 读取 Google Maps API Key
   let googleKey = getRuntimeGoogleMapsApiKey()
 
@@ -2551,43 +2555,50 @@ const initMap = async () => {
       if (backendSettings.google_maps_api_key) {
         googleKey = backendSettings.google_maps_api_key
         // 同步到 localStorage，下次不再需要请求后端
-        const { setRuntimeGoogleMapsApiKey: syncKey } = await import('@/services/api')
-        syncKey(googleKey)
+        setRuntimeGoogleMapsApiKey(googleKey)
       }
     } catch (err) {
       console.warn('从后端获取 Google Maps 配置失败:', err)
     }
   }
 
+  if (generation !== mapInitGeneration) return
+
   // 3. 尝试初始化 Google Maps
   if (googleKey) {
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined
     try {
       // 超时控制：如果 5 秒内未加载完，强制 reject 以触发降级
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Google Maps 加载超时，可能由于网络环境限制')), 5000)
+        timeoutHandle = setTimeout(() => reject(new Error('Google Maps 加载超时，可能由于网络环境限制')), 5000)
       })
-      const initPromise = initGoogleMap(googleKey)
+      const initPromise = initGoogleMap(googleKey, generation)
       await Promise.race([initPromise, timeoutPromise])
       return
     } catch (error) {
       console.warn('Google Maps 加载失败，即将降级到高德地图:', error)
+      if (generation !== mapInitGeneration) return
       destroyCurrentMap()
       // 等待 DOM 更新，确保高德容器可以显示
       await nextTick()
+    } finally {
+      clearTimeout(timeoutHandle)
     }
   }
+
+  if (generation !== mapInitGeneration) return
 
   // 4. 降级/默认：初始化高德地图
   await initAMap()
 }
 
 // 初始化 Google Maps
-const initGoogleMap = async (apiKey: string) => {
+const initGoogleMap = async (apiKey: string, generation: number) => {
   mapProviderType.value = 'google'
   const loader = new GoogleMapsLoader({
     apiKey,
     version: 'weekly',
-    language: 'zh-CN', // 保持语言为中文体验较好
+    language: localeTag.value,
   })
 
   // 这会抛出异常，如由于网络、无代理引起等，正好会被上层捕捉
@@ -2597,6 +2608,8 @@ const initGoogleMap = async (apiKey: string) => {
   // 加载可能用到的模块
   await loader.importLibrary('routes')
   await loader.importLibrary('marker')
+
+  if (generation !== mapInitGeneration) return
 
   const container = document.getElementById('google-map-container')
   if (!container) throw new Error('Cannot find google-map-container')
@@ -2631,13 +2644,15 @@ const initGoogleMap = async (apiKey: string) => {
   })
 
   // 添加景点标记
-  await addGoogleAttractionMarkers()
+  await addGoogleAttractionMarkers(generation)
+
+  if (generation !== mapInitGeneration) return
 
   message.success(t('result.messages.mapLoaded'))
 }
 
 // 添加 Google Maps 景点标记
-const addGoogleAttractionMarkers = async () => {
+const addGoogleAttractionMarkers = async (generation: number) => {
   if (!tripPlan.value || !googleMap) return
 
   const allAttractions: any[] = []
@@ -2663,13 +2678,6 @@ const addGoogleAttractionMarkers = async () => {
     const position = { lat: attraction.location.latitude, lng: attraction.location.longitude }
     bounds.extend(position)
 
-    // 创建自定义 DOM 元素以模拟 AMap 的原生样式
-    const div = document.createElement('div')
-    div.innerHTML = buildMarkerContent(attraction.dayIndex + 1, attraction.attrIndex + 1)
-    // 为了使 HTML 居中在点上，可以用 Marker 的 icon 承载或者用 AdvancedMarkerElement (如果你需要标准 API)。
-    // 这里采用兼容大多数的简单的 svg data URI：
-    const svgContent = buildFeatherCircleSvgDataUrl(34, '#d76e42', '#a14625')
-    
     // 这里如果想完全复用 DOM 较为复杂，我们可以直接采用原生的 google.maps.Marker 与自定义 icon
     // 用一个简单的 SVG data URI 画一个有数字的 icon
     const markerText = `${attraction.dayIndex + 1}-${attraction.attrIndex + 1}`
@@ -2705,7 +2713,10 @@ const addGoogleAttractionMarkers = async () => {
   })
 
   // 绘制 Google Maps 路线
+  if (generation !== mapInitGeneration) return
   await drawGoogleRoutes(allAttractions)
+
+  if (generation !== mapInitGeneration) return
 
   if (allAttractions.length > 0 && googleMap) {
     googleMap.fitBounds(bounds)

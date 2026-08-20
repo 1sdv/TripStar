@@ -175,7 +175,9 @@ const apiClient = axios.create({
 apiClient.interceptors.request.use(
   (config) => {
     config.baseURL = getRuntimeApiBaseUrl()
-    console.log('发送请求:', config.method?.toUpperCase(), config.url)
+    if (import.meta.env.DEV) {
+      console.log('发送请求:', config.method?.toUpperCase(), config.url)
+    }
     return config
   },
   (error) => {
@@ -187,7 +189,9 @@ apiClient.interceptors.request.use(
 // 响应拦截器
 apiClient.interceptors.response.use(
   (response) => {
-    console.log('收到响应:', response.status, response.config.url)
+    if (import.meta.env.DEV) {
+      console.log('收到响应:', response.status, response.config.url)
+    }
     return response
   },
   (error) => {
@@ -310,20 +314,13 @@ export async function getTripHistory(limit = 8): Promise<TripHistoryItem[]> {
   }
 }
 
-/**
- * 生成旅行计划（兼容旧接口，内部使用轮询）
- */
-export async function generateTripPlan(
-  formData: TripFormData,
+const resolveTaskWsUrl = (wsUrl: string): string =>
+  wsUrl.startsWith('ws://') || wsUrl.startsWith('wss://') ? wsUrl : `${getWsBaseUrl()}${wsUrl}`
+
+function subscribeTripTask(
+  wsUrl: string,
   options?: GenerateTripPlanOptions
 ): Promise<TripPlanResponse> {
-  const task = await submitTripPlan(formData)
-  options?.onTaskCreated?.(task)
-
-  const wsUrl = task.ws_url.startsWith('ws://') || task.ws_url.startsWith('wss://')
-    ? task.ws_url
-    : `${getWsBaseUrl()}${task.ws_url}`
-
   return new Promise((resolve, reject) => {
     let settled = false
     const socket = new WebSocket(wsUrl)
@@ -374,6 +371,38 @@ export async function generateTripPlan(
       }
     }
   })
+}
+
+/**
+ * 生成旅行计划
+ */
+export async function generateTripPlan(
+  formData: TripFormData,
+  options?: GenerateTripPlanOptions
+): Promise<TripPlanResponse> {
+  const task = await submitTripPlan(formData)
+  options?.onTaskCreated?.(task)
+  return subscribeTripTask(resolveTaskWsUrl(task.ws_url), options)
+}
+
+/**
+ * 重新挂接一个已提交的任务。
+ * 页面刷新、WebSocket 断线或代理空闲超时后，后端任务可能仍在继续执行。
+ */
+export async function resumeTripPlan(
+  taskId: string,
+  options?: GenerateTripPlanOptions
+): Promise<TripPlanResponse> {
+  const status = await pollTaskStatus(taskId)
+
+  if (status?.status === 'completed' && status.result) {
+    return status.result as TripPlanResponse
+  }
+  if (status?.status === 'failed') {
+    throw new Error(status.error || t('api.generateTripPlanFailed'))
+  }
+
+  return subscribeTripTask(resolveTaskWsUrl(`/api/trip/ws/${taskId}`), options)
 }
 
 /**
