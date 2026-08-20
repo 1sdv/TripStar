@@ -9,6 +9,7 @@ from ...config import get_runtime_settings, update_runtime_settings
 from ...services.amap_service import reset_amap_service
 from ...services.google_map_service import reset_google_map_service
 from ...services.llm_service import reset_llm
+from ...services.map_dispatcher import reset_google_geo_failure
 from ...agents.trip_planner_agent import reset_trip_planner_agent
 
 router = APIRouter(prefix="/settings", tags=["运行时配置"])
@@ -48,6 +49,7 @@ async def save_settings(payload: RuntimeSettingsPayload):
         reset_llm()
         reset_amap_service()
         reset_google_map_service()
+        reset_google_geo_failure()
         reset_trip_planner_agent()
 
         return {

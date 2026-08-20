@@ -9,6 +9,7 @@
 """
 
 import json
+import threading
 from typing import Dict, Any, List, Optional
 
 import httpx
@@ -34,7 +35,6 @@ class GoogleMapService:
         client_kwargs: Dict[str, Any] = {"timeout": 15, "trust_env": False}
         if proxy:
             client_kwargs["proxy"] = proxy
-            print(f"  - Google Maps 代理已配置: {proxy}")
         self._client = httpx.Client(**client_kwargs)
 
     def close(self) -> None:
@@ -271,6 +271,7 @@ class GoogleMapService:
 # ============ 单例管理 ============
 
 _google_map_service: Optional[GoogleMapService] = None
+_google_map_service_lock = threading.Lock()
 
 
 def get_google_map_service() -> Optional[GoogleMapService]:
@@ -278,14 +279,18 @@ def get_google_map_service() -> Optional[GoogleMapService]:
     global _google_map_service
 
     if _google_map_service is None:
-        settings = get_settings()
-        if not settings.google_maps_api_key:
-            return None
-        _google_map_service = GoogleMapService(
-            api_key=settings.google_maps_api_key,
-            proxy=settings.google_maps_proxy,
-        )
-        print("✅ Google Maps 服务初始化成功")
+        with _google_map_service_lock:
+            if _google_map_service is None:
+                settings = get_settings()
+                if not settings.google_maps_api_key:
+                    return None
+                _google_map_service = GoogleMapService(
+                    api_key=settings.google_maps_api_key,
+                    proxy=settings.google_maps_proxy,
+                )
+                if settings.google_maps_proxy:
+                    print(f"  - Google Maps 代理已配置: {settings.google_maps_proxy}")
+                print("✅ Google Maps 服务初始化成功")
 
     return _google_map_service
 
@@ -293,6 +298,7 @@ def get_google_map_service() -> Optional[GoogleMapService]:
 def reset_google_map_service() -> None:
     """重置 Google Maps 服务实例（用于运行时配置更新后热生效）。"""
     global _google_map_service
-    if _google_map_service is not None:
-        _google_map_service.close()
-    _google_map_service = None
+    with _google_map_service_lock:
+        if _google_map_service is not None:
+            _google_map_service.close()
+        _google_map_service = None

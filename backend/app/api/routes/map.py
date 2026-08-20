@@ -6,6 +6,7 @@ from ...models.schemas import (
     POISearchRequest,
     POISearchResponse,
     RouteRequest,
+    RouteInfo,
     RouteResponse,
     WeatherResponse
 )
@@ -44,8 +45,8 @@ async def search_poi(
         pois = service.search_poi(keywords, city, citylimit)
         
         return POISearchResponse(
-            success=True,
-            message="POI搜索成功",
+            success=bool(pois),
+            message="POI搜索成功" if pois else "未获取到 POI 数据",
             data=pois
         )
         
@@ -83,8 +84,8 @@ async def get_weather(
         weather_info = service.get_weather(city)
         
         return WeatherResponse(
-            success=True,
-            message="天气查询成功",
+            success=bool(weather_info),
+            message="天气查询成功" if weather_info else "未获取到天气数据",
             data=weather_info
         )
         
@@ -124,11 +125,23 @@ async def plan_route(request: RouteRequest):
             destination_city=request.destination_city,
             route_type=request.route_type
         )
+
+        if not route_info:
+            return RouteResponse(
+                success=False,
+                message="未能获取路线数据",
+                data=None,
+            )
         
         return RouteResponse(
             success=True,
             message="路线规划成功",
-            data=route_info
+            data=RouteInfo(
+                distance=float(route_info.get("distance", 0)),
+                duration=int(route_info.get("duration", 0)),
+                route_type=request.route_type,
+                description=str(route_info.get("distance_text") or route_info.get("description") or ""),
+            )
         )
         
     except Exception as e:
@@ -160,4 +173,3 @@ async def health_check():
             status_code=503,
             detail=f"服务不可用: {str(e)}"
         )
-

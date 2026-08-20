@@ -11,7 +11,7 @@ if hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 from pathlib import Path
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -127,13 +127,18 @@ if _frontend_dist.exists():
     if _assets_dir.exists():
         app.mount("/assets", StaticFiles(directory=str(_assets_dir)), name="assets")
     # SPA catch-all: 未匹配的前端路由一律返回 index.html
+    _dist_root = _frontend_dist.resolve()
+
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         """SPA 前端路由 fallback"""
-        file_path = _frontend_dist / full_path
-        if file_path.exists() and file_path.is_file():
-            return FileResponse(str(file_path))
-        return FileResponse(str(_frontend_dist / "index.html"))
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+
+        candidate = (_dist_root / full_path).resolve()
+        if candidate.is_file() and candidate.is_relative_to(_dist_root):
+            return FileResponse(str(candidate))
+        return FileResponse(str(_dist_root / "index.html"))
 
 
 if __name__ == "__main__":

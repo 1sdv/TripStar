@@ -131,6 +131,22 @@ def _apply_runtime_overrides(overrides: Dict[str, Any]) -> None:
 _runtime_overrides = _load_runtime_overrides()
 _apply_runtime_overrides(_runtime_overrides)
 
+_SECRET_SETTING_KEYS = {
+    "openai_api_key",
+    "xhs_cookie",
+    "vite_amap_web_key",
+}
+_MASK_CHAR = "\u2022"
+
+
+def _mask_secret(value: str) -> str:
+    """返回不可还原掩码，仅保留少量首尾字符供用户辨认。"""
+    if not value:
+        return ""
+    if len(value) <= 8:
+        return _MASK_CHAR * 8
+    return f"{value[:4]}{_MASK_CHAR * 8}{value[-4:]}"
+
 
 def get_settings() -> Settings:
     """获取配置实例"""
@@ -138,8 +154,11 @@ def get_settings() -> Settings:
 
 
 def get_runtime_settings() -> Dict[str, str]:
-    """获取当前运行时配置（供前端设置页读取）。"""
-    return {
+    """获取当前运行时配置（供前端设置页读取）。
+
+    机密字段以掩码返回；进程内部需要真实值时直接读取 settings。
+    """
+    raw = {
         "vite_amap_web_key": settings.vite_amap_web_key or "",
         "vite_amap_web_js_key": settings.vite_amap_web_js_key or "",
         "google_maps_api_key": settings.google_maps_api_key or "",
@@ -148,6 +167,10 @@ def get_runtime_settings() -> Dict[str, str]:
         "openai_api_key": settings.openai_api_key or "",
         "openai_base_url": settings.openai_base_url or "",
         "openai_model": settings.openai_model or "",
+    }
+    return {
+        key: _mask_secret(value) if key in _SECRET_SETTING_KEYS else value
+        for key, value in raw.items()
     }
 
 
@@ -159,7 +182,11 @@ def update_runtime_settings(updates: Dict[str, Any]) -> Dict[str, str]:
     for key, value in updates.items():
         if key not in _RUNTIME_SETTING_KEYS:
             continue
-        normalized[key] = str(value).strip() if value is not None else ""
+        text = str(value).strip() if value is not None else ""
+        # 前端保存未修改的密码框时可能原样回传掩码；这时保持后端真实值不变。
+        if _MASK_CHAR in text:
+            continue
+        normalized[key] = text
 
     _runtime_overrides.update(normalized)
     _persist_runtime_overrides(_runtime_overrides)
