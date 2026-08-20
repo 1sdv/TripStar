@@ -46,6 +46,87 @@
 
 ---
 
+## システムアーキテクチャ
+
+本プロジェクトは標準的なフロントエンド・バックエンド分離アーキテクチャを採用し、Vue フロントエンド操作層、FastAPI バックエンドサービス層、LLM/Agents による知的推論層で構成されています。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    
+    participant Client as Frontend (ユーザー)
+    participant Route as api/routes/trip.py
+    participant Planner as trip_planner_agent.py
+    participant XHS as xhs_service.py
+    participant Maps as map_dispatcher.py
+    participant LLM as llm_service.py
+    participant POI as api/routes/poi.py
+    participant KG as knowledge_graph_service.py
+
+    Client->>Route: POST /api/trip/plan (都市, 日数, 嗜好)
+    Route-->>Client: task_id と ws_url を返す
+    Route->>Planner: 非同期タスク _run_trip_planning(request) を開始
+    Client->>Route: WebSocket /ws/{task_id} を購読
+    Note right of Route: WebSocket で processing/progress 状態をリアルタイム配信
+    
+    rect rgb(240, 248, 255)
+        Note over Planner, LLM: 並列処理ステージ (asyncio.gather 最適化)
+        
+        par [1/3] 観光地検索：Xiaohongshu ネイティブ API による精製
+            Planner->>XHS: search_xhs_attractions(city, keywords, lang)
+            XHS->>XHS: XhsNativeClient ネイティブ署名付き直アクセス / SSR フォールバック取得
+            XHS->>LLM: 旅行記本文を Prompt に投入し、観光地 JSON 配列の抽出を要求
+            LLM-->>XHS: [{"name": "故宮", "duration": 120, ...}]
+            
+            loop 精製済み観光地ごとに座標を補完
+                XHS->>Maps: geocode_unified(name, city)
+                Note right of Maps: Google ジオコーディングを優先し、失敗時は高徳 REST にフォールバック
+                Maps-->>XHS: 座標 {longitude, latitude}
+            end
+            XHS-->>Planner: 整理済みの Xiaohongshu 観光地候補テキストを返す
+            
+        and [2/3] 天気検索：Agent が Tool を呼び出し
+            Planner->>Planner: weather_agent.run()
+            Planner->>Maps: Agent が Google/AMap MCP Weather Tool を呼び出し
+            Maps-->>Planner: 将来の天気データを返す
+            Note right of Planner: Google API が失敗した場合、高徳天気 REST に自動フォールバック
+            
+        and [3/3] ホテル検索：Agent が Tool を呼び出し
+            Planner->>Planner: hotel_agent.run()
+            Planner->>Maps: Agent が Google/AMap MCP POI Text Search を呼び出し
+            Maps-->>Planner: ホテル一覧を返す
+        end
+    end
+    
+    rect rgb(255, 240, 245)
+        Note over Planner, LLM: 逐次集約ステージ：最終プランの統合
+        Planner->>LLM: 観光地・天気・ホテルのコンテキストを最終 Planner Prompt に結合
+        LLM-->>Planner: 【高リスク操作】旅程・予算などを含む複雑なネスト JSON 文字列を返す
+        
+        Planner->>Planner: _parse_response() フォールトトレラント解析
+        Note right of Planner: 1. ノイズ文字を除去<br>2. 未エスケープ引用符を修正<br>3. 切断された JSON を括弧補完で修復<br>4. JSON を強制抽出<br>5. 全て失敗した場合は LLM に修復を依頼
+    end
+
+    Planner->>KG: build_knowledge_graph(trip_plan, lang)
+    Note right of KG: 都市・日程・観光地・予算・提案のノードとエッジを抽出し、言語別にラベル翻訳
+    KG-->>Planner: graph_data (nodes, edges, categories)
+
+    Planner-->>Route: 完全な TripPlanResponse 構造を返す
+    Route->>Route: _update_task_state(status="completed") をディスクに永続化
+    Route-->>Client: WebSocket で成功結果を配信 (plan JSON と graph トポロジー)
+    
+    rect rgb(240, 255, 240)
+        Note over Client, XHS: フロントエンド非同期遅延読み込み：観光地画像検索
+        Client->>POI: GET /api/poi/photo?name=xxx
+        POI->>XHS: get_photo_from_xhs(keyword)
+        XHS->>XHS: "xxx 風景" をネイティブ検索し、有効な最初のノートの1枚目画像を取得
+        XHS-->>POI: photo_url
+        POI-->>Client: 画像読み込み成功
+    end
+```
+
+---
+
 ## クイックインストールとデプロイメントガイド
 
 ### 環境の準備

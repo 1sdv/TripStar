@@ -54,54 +54,78 @@ Unlike traditional travel guide websites, this project adopts an innovative mode
 The project uses a standard decoupled frontend-backend architecture, divided into the Vue frontend interaction layer, FastAPI backend service layer, and the LLM/Agents intelligent inference layer.
 
 ```mermaid
-graph TD
-    subgraph G1 ["Frontend View"]
-        A1["Param Input Home.vue"]
-        A2["Immersive Loading Animation"]
-        A3["Premium Itinerary Result.vue"]
-        A4["Knowledge Graph Sidebar"]
-        A5["AI Travel Agent Float Window"]
+sequenceDiagram
+    autonumber
+    
+    participant Client as Frontend (User)
+    participant Route as api/routes/trip.py
+    participant Planner as trip_planner_agent.py
+    participant XHS as xhs_service.py
+    participant Maps as map_dispatcher.py
+    participant LLM as llm_service.py
+    participant POI as api/routes/poi.py
+    participant KG as knowledge_graph_service.py
+
+    Client->>Route: POST /api/trip/plan (city, days, preferences)
+    Route-->>Client: Return task_id & ws_url
+    Route->>Planner: Start async task _run_trip_planning(request)
+    Client->>Route: Subscribe via WebSocket /ws/{task_id}
+    Note right of Route: Push processing/progress status in real time via WebSocket
+    
+    rect rgb(240, 248, 255)
+        Note over Planner, LLM: Parallel stage (asyncio.gather optimization)
+        
+        par [1/3] Attraction search: Xiaohongshu native API refinement
+            Planner->>XHS: search_xhs_attractions(city, keywords, lang)
+            XHS->>XHS: XhsNativeClient native signed requests / SSR fallback scraping
+            XHS->>LLM: Feed travel notes into Prompt to extract an attraction JSON array
+            LLM-->>XHS: [{"name": "Forbidden City", "duration": 120, ...}]
+            
+            loop Fill coordinates for each refined attraction
+                XHS->>Maps: geocode_unified(name, city)
+                Note right of Maps: Google geocoding first; fallback to AMap REST on failure
+                Maps-->>XHS: Coordinates {longitude, latitude}
+            end
+            XHS-->>Planner: Return assembled Xiaohongshu attraction candidates
+            
+        and [2/3] Weather search: Agent calls Tool
+            Planner->>Planner: weather_agent.run()
+            Planner->>Maps: Agent calls Google/AMap MCP Weather Tool
+            Maps-->>Planner: Return future weather data
+            Note right of Planner: If Google API fails, automatically fallback to AMap weather REST
+            
+        and [3/3] Hotel search: Agent calls Tool
+            Planner->>Planner: hotel_agent.run()
+            Planner->>Maps: Agent calls Google/AMap MCP POI Text Search
+            Maps-->>Planner: Return hotel list
+        end
+    end
+    
+    rect rgb(255, 240, 245)
+        Note over Planner, LLM: Serial aggregation stage: final planning fusion
+        Planner->>LLM: Combine attraction, weather, and hotel contexts into the final Planner Prompt
+        LLM-->>Planner: [High-risk operation] Return a complex nested JSON string with itinerary and budget
+        
+        Planner->>Planner: _parse_response() fault-tolerant parsing
+        Note right of Planner: 1. Clean noisy characters<br>2. Fix unescaped quotes<br>3. Repair truncation by closing brackets<br>4. Force extract JSON<br>5. Ask LLM to repair if all else fails
     end
 
-    subgraph G2 ["Backend Gateway"]
-        B1["Async Polling <br/> POST/plan & GET/status"]
-        B2["Contextual AI Q&A<br/>POST/chat/ask"]
-        B3["Attraction Image API<br/>GET/poi/photo"]
+    Planner->>KG: build_knowledge_graph(trip_plan, lang)
+    Note right of KG: Extract nodes and edges for cities, days, attractions, budget, and suggestions; translate labels by language
+    KG-->>Planner: graph_data (nodes, edges, categories)
+
+    Planner-->>Route: Return full TripPlanResponse structure
+    Route->>Route: Persist _update_task_state(status="completed") to disk
+    Route-->>Client: Push success result via WebSocket (plan JSON and graph topology)
+    
+    rect rgb(240, 255, 240)
+        Note over Client, XHS: Async frontend lazy loading: attraction image search
+        Client->>POI: GET /api/poi/photo?name=xxx
+        POI->>XHS: get_photo_from_xhs(keyword)
+        XHS->>XHS: Native search for "xxx scenery" and take the first image from the first valid note
+        XHS-->>POI: photo_url
+        POI-->>Client: Image loaded successfully
     end
-
-    subgraph G3 ["Multi-Agent Engine"]
-        C1["Main Journey Agent"]
-        C2["Xiaohongshu Parser<br/>(SSR + LLM Refine)"]
-        C3["Weather Agent"]
-        C4["Hotel Recommendation Agent"]
-    end
-
-    subgraph G4 ["Service Layer"]
-        D1["LLM API <br/> doubao-seed-1-8-251228"]
-        D2["Geocoding / POI Search Server <br/> (AMap/Google)"]
-        D3["Weather/Time Retrieval Tool"]
-        D4["Xiaohongshu API<br/>Search/SSR Scrape"]
-    end
-
-    %% Interactions
-    A1 --> B1
-    A3 <--> B1
-    A3 --> B3
-    A5 <--> B2
-
-    B1 --> C1
-    B2 --> D1
-    B3 --> D4
-
-    C1 --> C2
-    C1 --> C3
-    C1 --> C4
-
-    C2 <--> D4
-    C2 --> D1
-    C2 --> D2
-    C3 <--> D3
-    C4 <--> D2
 ```
 
 ---
