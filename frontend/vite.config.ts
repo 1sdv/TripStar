@@ -12,11 +12,10 @@ export default defineConfig(({ mode }) => {
     plugins: [
       vue(),
       {
-        // Vite 的 %VAR% 替换在变量未定义时会保留占位符原文。
-        // 高德安全密钥未配置时应注入空串，而不是 "%VITE_AMAP_SECURITY_JS_CODE%"。
+        // 使用普通占位符，避免触发 Vite 对 %ENV% 的内置扫描告警。
         name: 'tripstar-inject-amap-security-code',
         transformIndexHtml(html: string) {
-          return html.replaceAll('%VITE_AMAP_SECURITY_JS_CODE%', amapSecurityJsCode)
+          return html.replaceAll('__AMAP_SECURITY_JS_CODE__', amapSecurityJsCode)
         },
       },
     ],
