@@ -2,3 +2,4 @@ backend/app/services/xhs_sign/xhs_xray.js linguist-vendored
 backend/app/services/xhs_sign/xhs_xray_pack1.js linguist-vendored
 backend/app/services/xhs_sign/xhs_xray_pack2.js linguist-vendored
 backend/app/services/xhs_sign/xhs_xs_xsc_56.js linguist-vendored
+start.sh text eol=lf
