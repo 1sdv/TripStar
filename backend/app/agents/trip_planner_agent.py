@@ -930,13 +930,12 @@ JSON 的 key 名称保持英文不变，只翻译 value 中的文字。"""
 {tail}
 """
         try:
-            response = llm._client.chat.completions.create(
-                model=llm.model,
-                messages=[{"role": "user", "content": repair_prompt}],
+            content = llm.invoke(
+                [{"role": "user", "content": repair_prompt}],
                 temperature=0.0,
                 max_tokens=1500,
+                stream=False,
             )
-            content = response.choices[0].message.content or ""
             # 从修复结果中提取 JSON
             import re as _re
             if "```json" in content:

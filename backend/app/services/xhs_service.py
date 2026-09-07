@@ -389,12 +389,11 @@ JSON 返回示例:
 ]
 """
     try:
-        response = llm._client.chat.completions.create(
-            model=llm.model,
-            messages=[{"role": "user", "content": extract_prompt}],
+        content = llm.invoke(
+            [{"role": "user", "content": extract_prompt}],
             temperature=0.1,
+            stream=False,
         )
-        content = response.choices[0].message.content
 
         json_match = re.search(r'\[.*\]', content, re.DOTALL)
         if json_match:

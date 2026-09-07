@@ -46,15 +46,39 @@ class DirectOpenAILLM:
         )
 
     def invoke(self, messages, **kwargs):
-        """兼容 HelloAgentsLLM 的核心接口，返回纯文本内容。"""
-        response = self._client.chat.completions.create(
-            model=kwargs.get("model", self.model),
-            messages=messages,
-            temperature=kwargs.get("temperature", 0.7),
-            max_tokens=kwargs.get("max_tokens"),
-            top_p=kwargs.get("top_p"),
-            stop=kwargs.get("stop"),
-        )
+        """兼容 HelloAgentsLLM 的核心接口，默认使用流式输出并拼接为纯文本。"""
+        stream = kwargs.pop("stream", True)
+        request_kwargs = {
+            "model": kwargs.get("model", self.model),
+            "messages": messages,
+            "temperature": kwargs.get("temperature", 0.7),
+            "max_tokens": kwargs.get("max_tokens"),
+            "top_p": kwargs.get("top_p"),
+            "stop": kwargs.get("stop"),
+        }
+
+        if kwargs.get("response_format") is not None:
+            request_kwargs["response_format"] = kwargs["response_format"]
+
+        if kwargs.get("tools") is not None:
+            request_kwargs["tools"] = kwargs["tools"]
+        if kwargs.get("tool_choice") is not None:
+            request_kwargs["tool_choice"] = kwargs["tool_choice"]
+
+        if stream:
+            request_kwargs["stream"] = True
+            stream_resp = self._client.chat.completions.create(**request_kwargs)
+            content_parts = []
+            for chunk in stream_resp:
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
+                piece = getattr(delta, "content", None)
+                if piece:
+                    content_parts.append(piece)
+            return "".join(content_parts)
+
+        response = self._client.chat.completions.create(**request_kwargs)
         choice = response.choices[0]
         content = getattr(choice.message, "content", None) or ""
         return content
