@@ -59,7 +59,7 @@ COPY --from=frontend-builder /build/dist ./frontend/dist
 
 # 复制启动脚本
 COPY start.sh ./start.sh
-RUN chmod +x ./start.sh
+RUN sed -i 's/\r$//' ./start.sh && chmod +x ./start.sh
 
 # 魔搭创空间要求端口 7860
 EXPOSE 7860
