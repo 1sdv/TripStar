@@ -241,5 +241,22 @@ npm run dev
 - [x] ~~マルチ都市の旅行計画構成~~
 - [ ] グルメ・おすすめレストランの詳細な強化
 
+## Star History
+
+<a href="https://www.star-history.com/?repos=1sdv%2Ftripstar&type=date&legend=bottom-right">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=1sdv/tripstar&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=1sdv/tripstar&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=1sdv/tripstar&type=date&legend=top-left" />
+ </picture>
+</a>
+
+## コントリビューター
+
+<a href="https://github.com/1sdv/TripStar/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=1sdv/TripStar" />
+</a>
+
+
 ## 🙏 謝辞
 TripStarの改良において交流およびフィードバックをしていただいた [linuxdo](https://linux.do/) コミュニティに感謝します。

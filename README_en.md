@@ -309,7 +309,20 @@ TripStar/
 
 ## Star History
 
-<img width="869" height="611" alt="image" src="https://github.com/user-attachments/assets/d4fa1360-c309-46b0-80fe-bc8fe44f26b1" />
+<a href="https://www.star-history.com/?repos=1sdv%2Ftripstar&type=date&legend=bottom-right">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=1sdv/tripstar&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=1sdv/tripstar&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=1sdv/tripstar&type=date&legend=top-left" />
+ </picture>
+</a>
+
+
+## Contributors
+
+<a href="https://github.com/1sdv/TripStar/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=1sdv/TripStar" />
+</a>
 
 
 ## 🙏 Acknowledgements
