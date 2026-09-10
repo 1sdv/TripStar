@@ -37,6 +37,18 @@
               <h3>{{ t('home.step1') }}</h3>
             </div>
 
+            <a-form-item name="origin_city" :rules="formRules.originCity">
+              <template #label>
+                <span class="field-label">{{ t('home.originCityLabel') }}</span>
+              </template>
+              <a-input
+                v-model:value="formData.origin_city"
+                :placeholder="t('home.originCityPlaceholder')"
+                size="large"
+                class="field-input"
+              />
+            </a-form-item>
+
             <!-- 多城市动态列表 -->
             <div class="city-list">
               <div v-for="(cs, idx) in formData.cities" :key="idx" class="city-row">
@@ -301,6 +313,7 @@ import type { TripFormData, TripTaskEvent, TripHistoryItem, CityStay } from '@/t
 import type { Dayjs } from 'dayjs'
 
 type LandingFormData = {
+  origin_city: string
   cities: Array<{ city: string; days: number }>
   start_date: Dayjs | null
   transportation: string
@@ -345,10 +358,12 @@ const interestOptions = [
 ]
 
 const formRules = computed(() => ({
+  originCity: [{ required: true, message: t('home.originCityRequired') }],
   startDate: [{ required: true, message: t('home.startDateRequired') }],
 }))
 
 const formData = reactive<LandingFormData>({
+  origin_city: '',
   cities: [{ city: '', days: 2 }],
   start_date: null,
   transportation: '公共交通',
@@ -496,6 +511,7 @@ const handleSubmit = async () => {
     const endDate = computedEndDate.value!
 
     const requestData: TripFormData = {
+      origin_city: formData.origin_city.trim(),
       city: citiesPayload[0].city,
       cities: citiesPayload,
       start_date: formData.start_date.format('YYYY-MM-DD'),
