@@ -316,7 +316,21 @@ TripStar/
 
 
 ## Star History
-<img width="869" height="611" alt="image" src="https://github.com/user-attachments/assets/7ca4e182-c3b3-47ac-9797-2e1867130660" />
+
+<a href="https://www.star-history.com/?repos=1sdv%2Ftripstar&type=date&legend=bottom-right">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=1sdv/tripstar&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=1sdv/tripstar&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=1sdv/tripstar&type=date&legend=top-left" />
+ </picture>
+</a>
+
+
+## 贡献者
+
+<a href="https://github.com/1sdv/TripStar/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=1sdv/TripStar" />
+</a>
 
 
 ## 🙏 致谢
