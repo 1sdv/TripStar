@@ -88,6 +88,7 @@ export interface TripPlan {
 }
 
 export interface TripFormData {
+  origin_city?: string
   city: string
   cities?: CityStay[]
   start_date: string
