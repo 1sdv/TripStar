@@ -86,6 +86,58 @@ async def search_poi(keywords: str, city: str = "北京"):
 
 
 @router.get(
+    "/image",
+    summary="代理获取小红书图片",
+    description="按景点名从缓存取图（miss 自动重搜新直链并立即下载），或代理白名单内的小红书稳定直链，规避 CDN 防盗链与时效签名（issue #28）"
+)
+async def proxy_attraction_image(name: Optional[str] = None, url: Optional[str] = None):
+    """
+    代理小红书图片，二选一传参：
+
+    - name: 景点名。优先读关键词磁盘缓存；miss 时自动重搜新直链并立即下载
+      （搜索返回的直链约 1 分钟即失效，浏览器直接引用必然 403）。
+    - url: 小红书稳定格式图片直链（仅限 *.xiaohongshu.com / *.xhscdn.com），
+      用于代理行程数据中内嵌的直链。
+    """
+    from fastapi.responses import Response
+    from ...services.xhs_service import (
+        XHSImageProxyError,
+        fetch_xhs_image_bytes,
+        get_photo_bytes_from_xhs,
+    )
+
+    if name:
+        result = await get_photo_bytes_from_xhs(f"{name} 风景")
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"未能获取 {name} 的景点图片")
+        data, content_type = result
+        return Response(
+            content=data,
+            media_type=content_type,
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    if url:
+        try:
+            data, content_type = fetch_xhs_image_bytes(url)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except XHSImageProxyError as e:
+            print(f"❌ 图片代理失败: {e}")
+            raise HTTPException(status_code=502, detail=str(e))
+        except Exception as e:
+            print(f"❌ 图片代理异常: {e}")
+            raise HTTPException(status_code=502, detail=f"图片代理请求失败: {e}")
+        return Response(
+            content=data,
+            media_type=content_type,
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    raise HTTPException(status_code=400, detail="必须提供 name 或 url 查询参数")
+
+
+@router.get(
     "/photo",
     summary="获取景点图片",
     description="根据景点名称从小红书获取图片"
