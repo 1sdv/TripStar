@@ -53,7 +53,11 @@ class SqliteMemoryStore(BaseMemoryStore):
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
-                "SELECT * FROM user_memory WHERE user_id = ?", (user_id,)
+                """
+                SELECT memory_id, content, source, weight, create_time, last_access_time
+                FROM user_memory WHERE user_id = ?
+                """,
+                (user_id,),
             )
             rows = await cursor.fetchall()
             for r in rows:
