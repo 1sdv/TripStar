@@ -324,7 +324,7 @@
                       <!-- 景点图片 -->
                       <div class="attraction-image-wrapper">
                         <img
-                          :src="item.image_url || getAttractionImage(item.name, index)"
+                          :src="toProxiedPhotoUrl(item.image_url) || getAttractionImage(item.name, index)"
                           :alt="item.name"
                           class="attraction-image"
                           @error="handleImageError"
@@ -1797,6 +1797,12 @@ const restoreBudgetItem = (pendingItem: BudgetRestoreItem) => {
   message.success(t('result.messages.budgetItemRestored'))
 }
 
+// 将小红书图片直链包装为后端代理地址，规避图片 CDN 的 Referer 防盗链（issue #28）
+const toProxiedPhotoUrl = (url?: string | null): string => {
+  if (!url) return ''
+  return `${getRuntimeApiBaseUrl()}/api/poi/image?url=${encodeURIComponent(url)}`
+}
+
 // 加载所有景点图片
 const loadAttractionPhotos = async () => {
   if (!tripPlan.value) return
@@ -1826,7 +1832,8 @@ const loadAttractionPhotos = async () => {
         )
         const data = await response.json()
         if (data.success && data.data.photo_url) {
-          attractionPhotos.value[name] = data.data.photo_url
+          // 直链带时效签名会过期，统一改走后端 name 键代理（缓存 miss 时自动重搜重取）
+          attractionPhotos.value[name] = `${apiBase}/api/poi/image?name=${encodeURIComponent(name)}`
         }
       } catch (err) {
         console.error(`获取${name}图片失败:`, err)
@@ -1893,7 +1900,7 @@ const buildExportHTML = (mapDataUrl: string = ''): string => {
   tp.days.forEach((day, index) => {
     let attractionsHTML = ''
     day.attractions.forEach((a, ai) => {
-      const photoUrl = a.image_url || attractionPhotos.value[a.name] || ''
+      const photoUrl = toProxiedPhotoUrl(a.image_url) || attractionPhotos.value[a.name] || ''
       const durationText = t('result.export.durationLine', { duration: a.visit_duration || '—' })
       // 图片自适应：不压缩不裁剪，保持原始比例
       const imgTag = photoUrl

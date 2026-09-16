@@ -1,2 +1,3 @@
 backend/runtime_settings.json
 backend/data/trip_tasks
+backend/data/photo_cache
