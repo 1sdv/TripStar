@@ -11,7 +11,7 @@ import random
 import logging
 import threading
 import time
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlparse
@@ -25,6 +25,34 @@ from .xhs_sign.sign_util import generate_request_params, splice_str, generate_x_
 logger = logging.getLogger(__name__)
 _amap_geocode_warning_lock = threading.Lock()
 _amap_geocode_warning_keys: set[tuple[str, str]] = set()
+_amap_geocode_rate_lock = threading.Lock()
+_amap_geocode_request_times = deque()
+_AMAP_GEOCODE_RATE_LIMIT = 3
+_AMAP_GEOCODE_RATE_WINDOW = 1.0
+
+
+def _wait_for_amap_geocode_slot() -> None:
+    """限制高德地理编码请求启动速率，避免超过官方 3 次/秒上限。"""
+    while True:
+        wait_seconds = 0.0
+        now = time.monotonic()
+        with _amap_geocode_rate_lock:
+            while (
+                _amap_geocode_request_times
+                and now - _amap_geocode_request_times[0] >= _AMAP_GEOCODE_RATE_WINDOW
+            ):
+                _amap_geocode_request_times.popleft()
+
+            if len(_amap_geocode_request_times) < _AMAP_GEOCODE_RATE_LIMIT:
+                _amap_geocode_request_times.append(now)
+                return
+
+            wait_seconds = _AMAP_GEOCODE_RATE_WINDOW - (
+                now - _amap_geocode_request_times[0]
+            )
+
+        if wait_seconds > 0:
+            time.sleep(wait_seconds)
 
 
 class XHSCookieExpiredError(Exception):
@@ -226,16 +254,21 @@ def _geocode_amap_raw(address: str, city: str) -> Optional[dict]:
         return None
 
     params = {
-        "keywords": address,
-        "city": city,
-        "offset": 1,
         "key": settings.vite_amap_web_key,
+        "address": address,
+        "output": "JSON",
     }
+    if city:
+        params["city"] = city
+
     try:
-        resp = httpx.get("https://restapi.amap.com/v3/place/text", params=params, timeout=5, trust_env=False)
+        _wait_for_amap_geocode_slot()
+        resp = httpx.get("https://restapi.amap.com/v3/geocode/geo", params=params, timeout=5, trust_env=False)
         data = resp.json()
-        if data.get("status") == "1" and data.get("pois"):
-            location = data["pois"][0]["location"]
+        if data.get("status") == "1" and data.get("geocodes"):
+            location = data["geocodes"][0].get("location", "")
+            if not location:
+                return None
             lon, lat = location.split(",")
             return {"longitude": float(lon), "latitude": float(lat)}
         info = str(data.get("info") or "")
@@ -420,7 +453,7 @@ JSON 返回示例:
 
         locations: List[Optional[dict]] = []
         if valid_items:
-            with ThreadPoolExecutor(max_workers=min(5, len(valid_items))) as pool:
+            with ThreadPoolExecutor(max_workers=min(3, len(valid_items))) as pool:
                 locations = list(pool.map(_resolve_location, valid_items))
 
         final_result = f"这是小红书热门精选游记的提取结果，附带确切坐标（图片由前端单独搜索获取）：\n"
