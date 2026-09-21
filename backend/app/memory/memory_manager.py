@@ -69,6 +69,11 @@ class MemoryManager:
         for mid in remove_ids:
             await self.store.delete(user_id, mid)
 
+        # SQLite 返回独立对象，需要显式保存衰减后的权重与时间戳。
+        # 在 TOP-K 截断前保存，保持两种存储后端的遗忘行为一致。
+        for item in valid_items:
+            await self.store.save(user_id, item)
+
         valid_items.sort(key=lambda x: x.weight, reverse=True)
         top_k_items = valid_items[:MAX_RECALL_COUNT]
         logger.debug(
