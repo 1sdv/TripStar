@@ -30,10 +30,23 @@ class TripRequest(BaseModel):
     @model_validator(mode='after')
     def normalize_cities(self):
         """兼容处理: 如果只填了 city 没填 cities, 自动转换"""
-        if not self.cities and self.city:
+        # 判断「有没有填」时按去空白后是否为空来算，否则 city="   " 会被当成
+        # 有效值，进而造出一条城市名为空白的 CityStay。
+        if not self.cities and (self.city or "").strip():
             self.cities = [CityStay(city=self.city, days=self.travel_days)]
-        if self.cities and not self.city:
+        if self.cities and not (self.city or "").strip():
             self.city = self.cities[0].city
+        # 下游流程依赖 cities 非空（trip_planner_agent 会直接取 cities[0]），
+        # 这里必须拦住，否则请求先返回 200、再在后台任务里以
+        # 「IndexError: list index out of range」失败，用户拿到的是无法定位的报错。
+        if not self.cities:
+            raise ValueError("必须提供 city 或 cities 中的至少一个目的地城市")
+        # 城市名只有空白同样无效。注意必须**逐条**检查，而不是「全部为空才拒绝」：
+        # 只要有一条是空白，cities[0] 就可能是空白的（于是 city 也被填成空），
+        # 而且它会一路走到 trip_planner_agent，为那一天生成一个没有城市名的日程。
+        blank_names = [cs.city for cs in self.cities if not (cs.city or "").strip()]
+        if blank_names:
+            raise ValueError("目的地城市名称不能为空")
         return self
 
     class Config:
