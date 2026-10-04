@@ -14,6 +14,7 @@ services:
       - LLM_BASE_URL=${LLM_BASE_URL:-your_url}
       - LLM_MODEL_ID=${LLM_MODEL_ID:-your_model}
       - LLM_TIMEOUT=${LLM_TIMEOUT:-600}
+      - LLM_MAX_RETRIES=${LLM_MAX_RETRIES:-2}
       - VITE_AMAP_WEB_KEY=${VITE_AMAP_WEB_KEY:-your_amap_web_api_key_here}
       - XHS_COOKIE=${XHS_COOKIE:-your_xhs_cookie_here}
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}

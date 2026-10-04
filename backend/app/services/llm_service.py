@@ -26,7 +26,7 @@ def _clear_system_proxy_env() -> None:
 class DirectOpenAILLM:
     """轻量 LLM 适配器，避免 HelloAgentsLLM 构造阶段自动继承系统代理。"""
 
-    def __init__(self, model: str, api_key: str, base_url: str, timeout: int):
+    def __init__(self, model: str, api_key: str, base_url: str, timeout: int, max_retries: int = 2):
         self.provider = "openai-compatible"
         self.model = model
         self.api_key = api_key
@@ -36,6 +36,7 @@ class DirectOpenAILLM:
             api_key=self.api_key,
             base_url=self.base_url,
             timeout=self.timeout,
+            max_retries=max_retries,
             http_client=httpx.Client(
                 timeout=self.timeout,
                 trust_env=False,
@@ -119,12 +120,19 @@ def get_llm() -> DirectOpenAILLM:
             or "gpt-4"
         )
         timeout = int(os.getenv("LLM_TIMEOUT", "60"))
+        try:
+            max_retries = int(os.getenv("LLM_MAX_RETRIES", "2"))
+        except ValueError:
+            raise ValueError("LLM_MAX_RETRIES must be a non-negative integer") from None
+        if max_retries < 0:
+            raise ValueError("LLM_MAX_RETRIES must be a non-negative integer")
 
         _llm_instance = DirectOpenAILLM(
             model=model,
             api_key=api_key,
             base_url=base_url,
             timeout=timeout,
+            max_retries=max_retries,
         )
         
         print(f"✅ LLM服务初始化成功")
