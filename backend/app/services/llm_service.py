@@ -48,6 +48,15 @@ class DirectOpenAILLM:
     def invoke(self, messages, **kwargs):
         """兼容 HelloAgentsLLM 的核心接口，默认使用流式输出并拼接为纯文本。"""
         stream = kwargs.pop("stream", True)
+        # 允许调用方为单次请求覆盖超时（行程规划阶段会传入
+        # TRIP_PLANNER_TIMEOUT，需要比 LLM_TIMEOUT 更长）。未提供时沿用
+        # 客户端级的 LLM_TIMEOUT，因此不改变既有调用方的行为。
+        request_timeout = kwargs.pop("timeout", None)
+        client = (
+            self._client.with_options(timeout=request_timeout)
+            if request_timeout is not None
+            else self._client
+        )
         request_kwargs = {
             "model": kwargs.get("model", self.model),
             "messages": messages,
@@ -67,7 +76,7 @@ class DirectOpenAILLM:
 
         if stream:
             request_kwargs["stream"] = True
-            stream_resp = self._client.chat.completions.create(**request_kwargs)
+            stream_resp = client.chat.completions.create(**request_kwargs)
             content_parts = []
             for chunk in stream_resp:
                 if not chunk.choices:
@@ -78,7 +87,7 @@ class DirectOpenAILLM:
                     content_parts.append(piece)
             return "".join(content_parts)
 
-        response = self._client.chat.completions.create(**request_kwargs)
+        response = client.chat.completions.create(**request_kwargs)
         choice = response.choices[0]
         content = getattr(choice.message, "content", None) or ""
         return content
