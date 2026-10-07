@@ -1,6 +1,14 @@
 node_modules
 frontend/node_modules
+# 显式列出 backend/node_modules：一是让「后端也依赖 Node」这件事可见
+# （小红书签名引擎需要 crypto-js），二是避免阅读时误以为只忽略了前端。
+backend/node_modules
 frontend/dist
+# 包管理器缓存：只影响构建上下文体积，与运行无关
+.npm-cache
+.uv-cache
+# 日志文件
+*.log
 __pycache__
 *.pyc
 .git

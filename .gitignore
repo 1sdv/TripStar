@@ -1,3 +1,35 @@
+# ========== 本地配置与密钥（.env.example 是模板，必须保留） ==========
+# .env.* 覆盖 .env.local / .env.production / .env.development 等
+# （Vite 的模式文件也走这套命名），末尾再显式放行所有 .env.example。
+.env
+.env.*
+!.env.example
 backend/runtime_settings.json
 backend/data/trip_tasks
 backend/data/photo_cache
+
+# ========== 依赖目录（无前导斜杠，匹配任意层级） ==========
+node_modules/
+
+# ========== 构建产物 ==========
+dist/
+build/
+*.egg-info/
+
+# ========== 缓存 ==========
+.npm-cache/
+.uv-cache/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+
+# ========== 虚拟环境 ==========
+.venv/
+venv/
+
+# ========== 日志 ==========
+*.log
+
+# ========== 操作系统 / 编辑器 ==========
+.DS_Store
+Thumbs.db
