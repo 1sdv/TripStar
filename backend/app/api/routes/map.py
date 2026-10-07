@@ -1,5 +1,7 @@
 """地图服务API路由"""
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 from ...models.schemas import (
@@ -13,6 +15,12 @@ from ...models.schemas import (
 from ...services.amap_service import get_amap_service
 
 router = APIRouter(prefix="/map", tags=["地图服务"])
+
+# 本模块路由都是 async def，而 AmapService 连构造带调用都是同步阻塞的：
+# MCPTool 初始化会 spawn `uvx amap-mcp-server` 并做服务发现
+# （hello_agents/tools/builtin/protocol_tools.py:124 → :271），run() 也会
+# 另开线程后 future.result() 等待（同文件 :447-458）。因此统一用
+# asyncio.to_thread 派发，避免冻结事件循环导致进度推送与轮询一起失效。
 
 
 @router.get(
@@ -39,10 +47,10 @@ async def search_poi(
     """
     try:
         # 获取服务实例
-        service = get_amap_service()
+        service = await asyncio.to_thread(get_amap_service)
         
         # 搜索POI
-        pois = service.search_poi(keywords, city, citylimit)
+        pois = await asyncio.to_thread(service.search_poi, keywords, city, citylimit)
         
         return POISearchResponse(
             success=bool(pois),
@@ -78,10 +86,10 @@ async def get_weather(
     """
     try:
         # 获取服务实例
-        service = get_amap_service()
+        service = await asyncio.to_thread(get_amap_service)
         
         # 查询天气
-        weather_info = service.get_weather(city)
+        weather_info = await asyncio.to_thread(service.get_weather, city)
         
         return WeatherResponse(
             success=bool(weather_info),
@@ -115,10 +123,11 @@ async def plan_route(request: RouteRequest):
     """
     try:
         # 获取服务实例
-        service = get_amap_service()
+        service = await asyncio.to_thread(get_amap_service)
         
         # 规划路线
-        route_info = service.plan_route(
+        route_info = await asyncio.to_thread(
+            service.plan_route,
             origin_address=request.origin_address,
             destination_address=request.destination_address,
             origin_city=request.origin_city,
@@ -161,7 +170,7 @@ async def health_check():
     """健康检查"""
     try:
         # 检查服务是否可用
-        service = get_amap_service()
+        service = await asyncio.to_thread(get_amap_service)
         
         return {
             "status": "healthy",
