@@ -26,7 +26,8 @@ class LLMRetryTests(unittest.TestCase):
     def setUp(self):
         self.addCleanup(llm_service.reset_llm)
         llm_service.reset_llm()
-        self.start_patch(patch.dict(os.environ, {}, clear=True))
+        # Keep library discovery working on Windows while isolating LLM settings.
+        self.start_patch(patch.dict(os.environ, {"PATH": os.environ.get("PATH", os.defpath)}, clear=True))
         self.start_patch(patch.object(llm_service, "get_settings", return_value=SimpleNamespace(
             openai_api_key="test-key",
             openai_base_url="https://llm.invalid/v1",
@@ -90,6 +91,26 @@ class LLMRetryTests(unittest.TestCase):
             self.invoke(llm)
         self.assertEqual(self.transport.call_count, 1)
         self.sleep.assert_not_called()
+
+    def test_request_timeout_override_preserves_retries_and_default_timeout(self):
+        llm = self.make_llm(1)
+        for stream in (False, True):
+            with self.subTest(stream=stream):
+                self.transport.reset_mock()
+                self.transport.side_effect = [httpx.Response(503), self.success(stream)]
+                self.assertEqual(llm.invoke(
+                    [{"role": "user", "content": "test"}], stream=stream, timeout=180,
+                ), "ok")
+                self.assertEqual(self.transport.call_count, 2)
+                for call in self.transport.call_args_list:
+                    self.assertEqual(call.args[0].extensions["timeout"]["read"], 180)
+
+                # The per-request client must not change subsequent calls.
+                self.transport.reset_mock()
+                self.transport.side_effect = [self.success(stream)]
+                self.assertEqual(self.invoke(llm, stream), "ok")
+                request = self.transport.call_args.args[0]
+                self.assertEqual(request.extensions["timeout"]["read"], llm.timeout)
 
     def test_bad_request_and_auth_errors_are_not_retried(self):
         llm = self.make_llm(3)

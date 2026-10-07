@@ -1,5 +1,6 @@
 """高德地图MCP服务封装"""
 
+import threading
 from typing import List, Dict, Any, Optional
 from hello_agents.tools import MCPTool
 from ..config import get_settings
@@ -7,6 +8,9 @@ from ..models.schemas import Location, POIInfo, WeatherInfo
 
 # 全局MCP工具实例
 _amap_mcp_tool = None
+# 路由层现在会经 asyncio.to_thread 从多个工作线程调用本模块的取实例函数，
+# 因此「检查-构造-赋值」这段必须加锁（详见 get_amap_service 的注释）。
+_amap_mcp_tool_lock = threading.Lock()
 
 
 def get_amap_mcp_tool() -> MCPTool:
@@ -19,31 +23,33 @@ def get_amap_mcp_tool() -> MCPTool:
     global _amap_mcp_tool
     
     if _amap_mcp_tool is None:
-        settings = get_settings()
-        
-        if not settings.vite_amap_web_key:
-            raise ValueError("高德地图 API Key 未配置，请先在前端设置页完成配置")
-        
-        # 创建MCP工具
-        _amap_mcp_tool = MCPTool(
-            name="amap",
-            description="高德地图服务,支持POI搜索、路线规划、天气查询等功能",
-            server_command=["uvx", "amap-mcp-server"],
-            env={"AMAP_MAPS_API_KEY": settings.vite_amap_web_key},
-            auto_expand=True  # 自动展开为独立工具
-        )
-        
-        print(f"✅ 高德地图MCP工具初始化成功")
-        print(f"   工具数量: {len(_amap_mcp_tool._available_tools)}")
-        
-        # 打印可用工具列表
-        if _amap_mcp_tool._available_tools:
-            print("   可用工具:")
-            for tool in _amap_mcp_tool._available_tools[:5]:  # 只打印前5个
-                print(f"     - {tool.get('name', 'unknown')}")
-            if len(_amap_mcp_tool._available_tools) > 5:
-                print(f"     ... 还有 {len(_amap_mcp_tool._available_tools) - 5} 个工具")
-    
+        with _amap_mcp_tool_lock:
+            if _amap_mcp_tool is None:
+                settings = get_settings()
+
+                if not settings.vite_amap_web_key:
+                    raise ValueError("高德地图 API Key 未配置，请先在前端设置页完成配置")
+
+                # 创建MCP工具
+                _amap_mcp_tool = MCPTool(
+                    name="amap",
+                    description="高德地图服务,支持POI搜索、路线规划、天气查询等功能",
+                    server_command=["uvx", "amap-mcp-server"],
+                    env={"AMAP_MAPS_API_KEY": settings.vite_amap_web_key},
+                    auto_expand=True  # 自动展开为独立工具
+                )
+
+                print(f"✅ 高德地图MCP工具初始化成功")
+                print(f"   工具数量: {len(_amap_mcp_tool._available_tools)}")
+
+                # 打印可用工具列表
+                if _amap_mcp_tool._available_tools:
+                    print("   可用工具:")
+                    for tool in _amap_mcp_tool._available_tools[:5]:  # 只打印前5个
+                        print(f"     - {tool.get('name', 'unknown')}")
+                    if len(_amap_mcp_tool._available_tools) > 5:
+                        print(f"     ... 还有 {len(_amap_mcp_tool._available_tools) - 5} 个工具")
+
     return _amap_mcp_tool
 
 
@@ -256,20 +262,29 @@ class AmapService:
 
 # 创建全局服务实例
 _amap_service = None
+_amap_service_lock = threading.Lock()
 
 
 def get_amap_service() -> AmapService:
     """获取高德地图服务实例(单例模式)"""
     global _amap_service
-    
+
     if _amap_service is None:
-        _amap_service = AmapService()
-    
+        # 加锁的原因：路由层现在通过 asyncio.to_thread(get_amap_service) 调用本函数，
+        # 并发首次请求会同时进入这里。若不加锁，「检查 - 构造 - 赋值」之间存在窗口，
+        # 多个线程会各建一个 AmapService（每次构造都包含一次 MCP 服务发现往返），
+        # 后写入的覆盖先写入的，多出来的实例被直接丢弃。
+        with _amap_service_lock:
+            if _amap_service is None:
+                _amap_service = AmapService()
+
     return _amap_service
 
 
 def reset_amap_service() -> None:
     """重置高德地图服务与 MCP 工具实例（用于运行时配置更新后热生效）。"""
     global _amap_service, _amap_mcp_tool
-    _amap_service = None
-    _amap_mcp_tool = None
+    with _amap_service_lock:
+        _amap_service = None
+    with _amap_mcp_tool_lock:
+        _amap_mcp_tool = None

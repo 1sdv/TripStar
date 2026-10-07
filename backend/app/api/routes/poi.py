@@ -1,11 +1,19 @@
 """POI相关API路由"""
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from ...services.amap_service import get_amap_service
 
 router = APIRouter(prefix="/poi", tags=["POI"])
+
+# 本模块路由都是 async def，而 AmapService 连构造带调用都是同步阻塞的：
+# MCPTool 初始化会 spawn `uvx amap-mcp-server` 并做服务发现
+# （hello_agents/tools/builtin/protocol_tools.py:124 → :271），run() 也会
+# 另开线程后 future.result() 等待（同文件 :447-458）。因此统一用
+# asyncio.to_thread 派发，避免冻结事件循环导致进度推送与轮询一起失效。
 
 
 class POIDetailResponse(BaseModel):
@@ -32,10 +40,10 @@ async def get_poi_detail(poi_id: str):
         POI详情响应
     """
     try:
-        amap_service = get_amap_service()
+        amap_service = await asyncio.to_thread(get_amap_service)
         
         # 调用高德地图POI详情API
-        result = amap_service.get_poi_detail(poi_id)
+        result = await asyncio.to_thread(amap_service.get_poi_detail, poi_id)
         
         return POIDetailResponse(
             success=True,
@@ -68,8 +76,8 @@ async def search_poi(keywords: str, city: str = "北京"):
         搜索结果
     """
     try:
-        amap_service = get_amap_service()
-        result = amap_service.search_poi(keywords, city)
+        amap_service = await asyncio.to_thread(get_amap_service)
+        result = await asyncio.to_thread(amap_service.search_poi, keywords, city)
 
         return {
             "success": True,

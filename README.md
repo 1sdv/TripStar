@@ -167,7 +167,7 @@ sequenceDiagram
 
 * Python 3.10+
 * Node.js 18+
-* 大模型 API Key（推荐使用兼容 OpenAI 格式的服务商，如豆包）
+* 大模型 API Key（推荐使用兼容 OpenAI 格式的服务商）。为缩短攻略生成时间，建议选择支持结构化输出的 Flash 系列模型；模型需要能够稳定返回合法 JSON。
 * 高德地图两种 Key：Web 服务 Key（后端 REST 服务）与 Web端(JS API) Key（前端地图渲染）。AMap JS API 2.0 的安全密钥 JSCode 仍然必须填写，但填写到 `.env` / Docker 根目录 `.env` 的 `VITE_AMAP_SECURITY_JS_CODE`，构建或启动前端开发服务时会自动替换 `index.html` 里的占位符，不要把真实密钥直接手写进 `index.html`。（[高德 API](https://lbs.amap.com/)）
 * [Google Maps API Key](https://developers.google.com/maps/apis-by-platform)（若要使用 Google 地图引擎，必须在 Google Cloud 控制台中开通：**Geocoding API, Places API (New), Directions API, Maps JavaScript API, Weather API**，需要绑卡）
 * 小红书Cookie（[小红书](https://www.xiaohongshu.com/) 网页端登录后从浏览器开发者工具复制）
@@ -224,7 +224,7 @@ uv pip install -r requirements.txt
 
 # 复制配置文件并填入相应的 API KEY
 cp .env.example .env
-# [必填] LLM_API_KEY, LLM_BASE_URL, LLM_MODEL_ID（选择有结构化输出能力的模型）
+# [必填] LLM_API_KEY, LLM_BASE_URL, LLM_MODEL_ID（建议选择支持结构化输出的 Flash 系列模型，以缩短攻略生成时间）
 # [必填] VITE_AMAP_WEB_KEY (高德地图 web服务 类型的key)
 # [必填] XHS_COOKIE（小红书网页端登录后的Cookie）
 # [选填] GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_PROXY（如果需要支持 Google 地图引擎）

@@ -14,6 +14,9 @@ services:
       - LLM_BASE_URL=${LLM_BASE_URL:-your_url}
       - LLM_MODEL_ID=${LLM_MODEL_ID:-your_model}
       - LLM_TIMEOUT=${LLM_TIMEOUT:-600}
+      # 行程规划阶段单独的超时（秒）。规划时 prompt 最长（含各城市景点、天气、
+      # 酒店原文），需要比 LLM_TIMEOUT 更宽裕；只作用于规划这一次调用。
+      - TRIP_PLANNER_TIMEOUT=${TRIP_PLANNER_TIMEOUT:-180}
       - VITE_AMAP_WEB_KEY=${VITE_AMAP_WEB_KEY:-your_amap_web_api_key_here}
       - XHS_COOKIE=${XHS_COOKIE:-your_xhs_cookie_here}
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}

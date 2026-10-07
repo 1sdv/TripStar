@@ -133,7 +133,7 @@ sequenceDiagram
 
 * Python 3.10+
 * Node.js 18+
-* 大規模言語モデル API キー（OpenAIと互換性のあるものを推奨。Doubao など）
+* 大規模言語モデル API キー（OpenAI互換のサービスを推奨）。旅行計画の生成時間を短縮するため、構造化出力に対応した Flash シリーズのモデルを推奨します。モデルは有効な JSON を安定して返せる必要があります。
 * 高徳マップ (AMap) のキー：バックエンド REST サービス用の Web Service Key、フロントエンド地図表示用の Web JS API Key、AMap JS API 2.0 用の Security JSCode。Security JSCode は必須ですが、`.env` / Docker ルート `.env` の `VITE_AMAP_SECURITY_JS_CODE` に記入してください。フロントエンドの dev/build 時に Vite が `index.html` のプレースホルダーを自動置換します。実際のキーを `index.html` に直接ハードコードしないでください。Google Mapsを使用する場合、Google Cloudコンソールで **Geocoding API, Places API (New), Directions API, Maps JavaScript API, Weather API** を必ず有効にし、有効な課金アカウント（クレジットカード）をリンクする必要があります。
 * Xiaohongshu の Cookie（ブラウザにログイン後、DevToolsで取得）
 * `uv` パッケージマネージャーのインストール
@@ -196,7 +196,7 @@ uv pip install -r requirements.txt
 
 # .env に API KEY などを記入
 cp .env.example .env
-# [必須] LLM_API_KEY, LLM_BASE_URL, LLM_MODEL_ID
+# [必須] LLM_API_KEY, LLM_BASE_URL, LLM_MODEL_ID（生成時間短縮のため、構造化出力に対応した Flash シリーズのモデルを推奨）
 # [必須] VITE_AMAP_WEB_KEY（バックエンド REST サービス用の高徳 Web Service Key）
 # [必須] XHS_COOKIE
 # [任意] GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_PROXY
