@@ -164,7 +164,7 @@ The frontend renders dynamic Vue structures recursively by reading JSON data:
 
 * Python 3.10+
 * Node.js 18+
-* Large Model API Key (OpenAI-compatible endpoints highly recommended, e.g., Doubao)
+* Large Model API Key (OpenAI-compatible endpoints are highly recommended). To shorten itinerary generation time, choose a Flash-series model with reliable structured-output support; the model should consistently return valid JSON.
 * AMap Keys: Web Service Key for backend REST services, Web JS API Key for frontend map rendering, and AMap JS API 2.0 Security JSCode. The Security JSCode is still required, but it should be filled in `.env` / the Docker root `.env` as `VITE_AMAP_SECURITY_JS_CODE`; Vite replaces the placeholder in `index.html` during frontend dev/build. Do not hard-code the real secret directly in `index.html`. If using [Google Maps](https://developers.google.com/maps/apis-by-platform), you must enable: **Geocoding API, Places API (New), Directions API, Maps JavaScript API, and Weather API** in Google Cloud Console, and an active billing account is strictly required.
 * Xiaohongshu Cookie (Retrieve from browser dev tools after logging in on Web)
 * The `uv` package manager
@@ -229,7 +229,7 @@ uv pip install -r requirements.txt
 
 # Copy config and fill your API KEYs
 cp .env.example .env
-# [Required] LLM_API_KEY, LLM_BASE_URL, LLM_MODEL_ID (pick a model good at JSON struct)
+# [Required] LLM_API_KEY, LLM_BASE_URL, LLM_MODEL_ID (a Flash-series model with structured-output support is recommended to shorten itinerary generation time)
 # [Required] VITE_AMAP_WEB_KEY (AMap Web Service Key for backend REST services)
 # [Required] XHS_COOKIE
 # [Optional] GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_PROXY
