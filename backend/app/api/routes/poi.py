@@ -127,7 +127,9 @@ async def proxy_attraction_image(name: Optional[str] = None, url: Optional[str] 
 
     if url:
         try:
-            data, content_type = fetch_xhs_image_bytes(url)
+            # fetch_xhs_image_bytes 会读磁盘缓存并可能用 httpx 同步下载图片，
+            # 必须派发到工作线程，避免阻塞事件循环（同 name 分支的做法）。
+            data, content_type = await asyncio.to_thread(fetch_xhs_image_bytes, url)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         except XHSImageProxyError as e:
