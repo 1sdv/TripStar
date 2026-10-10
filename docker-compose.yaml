@@ -31,6 +31,7 @@ services:
       - HOST=0.0.0.0
       - PORT=7860
       - LOG_LEVEL=INFO
+      - LLM_MAX_RETRIES=${LLM_MAX_RETRIES:-2}
     volumes:
       - trip_data:/app/backend/data
     restart: unless-stopped
