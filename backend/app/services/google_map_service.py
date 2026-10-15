@@ -1,11 +1,14 @@
 """Google Maps API 服务封装
 
-提供与 AmapService 对等的 API 接口:
+提供与高德 REST 服务对等的地图能力：
   - search_poi       → Places API (Text Search)
   - geocode          → Geocoding API
   - plan_route       → Routes / Directions API
   - get_poi_detail   → Places Details API
   - get_weather      → Weather API (current + forecast + history)
+
+当前生效路径：`map_dispatcher.geocode_unified` 在配置了 Google Key 时调用
+本服务的 `geocode`；行程规划 Agent 在 Google 引擎下也通过它取 POI/天气。
 """
 
 import json

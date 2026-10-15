@@ -52,24 +52,6 @@ class TripRequest(BaseModel):
         }
 
 
-class POISearchRequest(BaseModel):
-    """POI搜索请求"""
-    keywords: str = Field(..., description="搜索关键词", example="故宫")
-    city: str = Field(..., description="城市", example="北京")
-    citylimit: bool = Field(default=True, description="是否限制在城市范围内")
-
-
-class RouteRequest(BaseModel):
-    """路线规划请求"""
-    origin_address: str = Field(..., description="起点地址", example="北京市朝阳区阜通东大街6号")
-    destination_address: str = Field(..., description="终点地址", example="北京市海淀区上地十街10号")
-    origin_city: Optional[str] = Field(default=None, description="起点城市")
-    destination_city: Optional[str] = Field(default=None, description="终点城市")
-    route_type: str = Field(default="walking", description="路线类型: walking/driving/transit")
-
-
-# ============ 响应模型 ============
-
 class Location(BaseModel):
     """地理位置"""
     longitude: float = Field(..., description="经度")
@@ -79,9 +61,10 @@ class Location(BaseModel):
 class Attraction(BaseModel):
     """景点信息"""
     name: str = Field(..., description="景点名称")
-    address: str = Field(..., description="地址")
-    location: Location = Field(..., description="经纬度坐标")
-    visit_duration: int = Field(..., description="建议游览时间(分钟)")
+    address: str = Field(default="", description="地址")
+    # 坐标可选：地理编码与 POI 兜底都失败时宁可为空，也不要用编造的坐标把景点标错位置
+    location: Optional[Location] = Field(default=None, description="经纬度坐标，未能解析时为 null")
+    visit_duration: int = Field(default=120, description="建议游览时间(分钟)")
     description: str = Field(..., description="景点描述")
     category: Optional[str] = Field(default="景点", description="景点类别")
     rating: Optional[float] = Field(default=None, description="评分")
@@ -227,35 +210,6 @@ class POIInfo(BaseModel):
     address: str = Field(..., description="地址")
     location: Location = Field(..., description="经纬度坐标")
     tel: Optional[str] = Field(default=None, description="电话")
-
-
-class POISearchResponse(BaseModel):
-    """POI搜索响应"""
-    success: bool = Field(..., description="是否成功")
-    message: str = Field(default="", description="消息")
-    data: List[POIInfo] = Field(default=[], description="POI列表")
-
-
-class RouteInfo(BaseModel):
-    """路线信息"""
-    distance: float = Field(..., description="距离(米)")
-    duration: int = Field(..., description="时间(秒)")
-    route_type: str = Field(..., description="路线类型")
-    description: str = Field(..., description="路线描述")
-
-
-class RouteResponse(BaseModel):
-    """路线规划响应"""
-    success: bool = Field(..., description="是否成功")
-    message: str = Field(default="", description="消息")
-    data: Optional[RouteInfo] = Field(default=None, description="路线信息")
-
-
-class WeatherResponse(BaseModel):
-    """天气查询响应"""
-    success: bool = Field(..., description="是否成功")
-    message: str = Field(default="", description="消息")
-    data: List[WeatherInfo] = Field(default=[], description="天气信息")
 
 
 # ============ 错误响应 ============

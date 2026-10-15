@@ -6,7 +6,6 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from ...config import get_runtime_settings, update_runtime_settings
-from ...services.amap_service import reset_amap_service
 from ...services.google_map_service import reset_google_map_service
 from ...services.llm_service import reset_llm
 from ...services.map_dispatcher import reset_google_geo_failure
@@ -47,7 +46,6 @@ async def save_settings(payload: RuntimeSettingsPayload):
 
         # 重置单例，确保新配置立即生效
         reset_llm()
-        reset_amap_service()
         reset_google_map_service()
         reset_google_geo_failure()
         reset_trip_planner_agent()

@@ -1,10 +1,12 @@
 """LLM服务模块"""
 
 import os
+import time
 
 import httpx
 from openai import OpenAI
 from ..config import get_settings
+from . import metrics
 
 # 全局LLM实例
 _llm_instance = None
@@ -46,7 +48,14 @@ class DirectOpenAILLM:
         )
 
     def invoke(self, messages, **kwargs):
-        """兼容 HelloAgentsLLM 的核心接口，默认使用流式输出并拼接为纯文本。"""
+        """兼容 HelloAgentsLLM 的核心接口，默认使用流式输出并拼接为纯文本。
+
+        支持的关键字参数：temperature / max_tokens / top_p / stop /
+        response_format / tools / tool_choice / stream / timeout。
+
+        `timeout` 走 `client.with_options()` **按请求**生效——它原先被漏传，
+        导致调用方（如 `TRIP_PLANNER_TIMEOUT`）设的超时完全不起作用。
+        """
         stream = kwargs.pop("stream", True)
         request_kwargs = {
             "model": kwargs.get("model", self.model),
@@ -65,23 +74,59 @@ class DirectOpenAILLM:
         if kwargs.get("tool_choice") is not None:
             request_kwargs["tool_choice"] = kwargs["tool_choice"]
 
+        # 按请求覆盖超时；未提供时沿用客户端级超时
+        client = self._client
+        request_timeout = kwargs.get("timeout")
+        if request_timeout:
+            try:
+                client = self._client.with_options(timeout=float(request_timeout))
+            except Exception as e:  # 覆盖失败不应阻断请求，退回客户端级超时
+                print(f"⚠️  LLM 按请求超时设置失败，沿用默认超时: {e}")
+
         if stream:
             request_kwargs["stream"] = True
-            stream_resp = self._client.chat.completions.create(**request_kwargs)
-            content_parts = []
-            for chunk in stream_resp:
-                if not chunk.choices:
-                    continue
-                delta = chunk.choices[0].delta
-                piece = getattr(delta, "content", None)
-                if piece:
-                    content_parts.append(piece)
-            return "".join(content_parts)
+            t0 = time.perf_counter()
+            try:
+                stream_resp = client.chat.completions.create(**request_kwargs)
+                content_parts = []
+                prompt_tokens = completion_tokens = 0
+                for chunk in stream_resp:
+                    # 流式响应的最后一个分片带 usage（部分服务商需要 stream_options 才给）
+                    usage = getattr(chunk, "usage", None)
+                    if usage is not None:
+                        prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+                        completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+                    if not chunk.choices:
+                        continue
+                    delta = chunk.choices[0].delta
+                    piece = getattr(delta, "content", None)
+                    if piece:
+                        content_parts.append(piece)
+                metrics.record_llm_call(
+                    time.perf_counter() - t0,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                )
+                return "".join(content_parts)
+            except Exception:
+                metrics.record_llm_call(time.perf_counter() - t0, error=True)
+                raise
 
-        response = self._client.chat.completions.create(**request_kwargs)
-        choice = response.choices[0]
-        content = getattr(choice.message, "content", None) or ""
-        return content
+        t0 = time.perf_counter()
+        try:
+            response = client.chat.completions.create(**request_kwargs)
+            choice = response.choices[0]
+            content = getattr(choice.message, "content", None) or ""
+            usage = getattr(response, "usage", None)
+            metrics.record_llm_call(
+                time.perf_counter() - t0,
+                prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+            )
+            return content
+        except Exception:
+            metrics.record_llm_call(time.perf_counter() - t0, error=True)
+            raise
 
     def __call__(self, messages, **kwargs):
         return self.invoke(messages, **kwargs)

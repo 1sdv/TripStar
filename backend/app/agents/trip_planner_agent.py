@@ -7,10 +7,33 @@ from typing import Dict, Any, List, Callable, Awaitable, Optional
 from hello_agents import SimpleAgent
 from hello_agents.tools import MCPTool
 from ..services.llm_service import get_llm
+from ..services.metrics import stage_timer, record_retrieval
+from ..services.provider_service import get_hotels, get_weather, probe_mcp_tools
 from ..models.schemas import TripRequest, TripPlan, DayPlan, Attraction, Meal, WeatherInfo, Location, Hotel
 from ..config import get_settings
 
 # ============ Agent提示词 (动态模版化，支持 amap / google 双供应商) ============
+
+
+# 每个城市的采集阶段（顺序即进度顺序）。
+# 进度由「阶段在列表里的位置」推导，而不是写死 `progress_step * 2` 这类步长乘法——
+# 那样一旦增删阶段，所有偏移都得手改，极易错位。
+CITY_COLLECTION_STAGES = ("attraction_search", "rag_search", "weather_search", "hotel_search")
+# 采集阶段占用的进度区间（%），其后留给 planning
+_COLLECTION_PROGRESS_START = 10
+_COLLECTION_PROGRESS_END = 85
+
+
+def _stage_progress(stage: str, city_index: int, total_cities: int) -> int:
+    """计算「第 city_index 个城市的第 stage 阶段」对应的进度百分比。"""
+    try:
+        stage_index = CITY_COLLECTION_STAGES.index(stage)
+    except ValueError:
+        stage_index = 0
+    per_city = (_COLLECTION_PROGRESS_END - _COLLECTION_PROGRESS_START) / max(1, total_cities)
+    per_stage = per_city / len(CITY_COLLECTION_STAGES)
+    value = _COLLECTION_PROGRESS_START + city_index * per_city + stage_index * per_stage
+    return int(round(value))
 
 
 def _build_weather_agent_prompt(tool_prefix: str) -> str:
@@ -237,6 +260,14 @@ class MultiAgentTripPlanner:
             print(f"   天气查询Agent: {len(self.weather_agent.list_tools())} 个工具")
             print(f"   酒店推荐Agent: {len(self.hotel_agent.list_tools())} 个工具")
 
+            # 探测 MCP 工具是否真的展开注册。MCP 服务器不可用时工具发现会静默为空，
+            # 此时直接走高德 REST，省掉「注定失败的 LLM 调用 + 错误文案回合」。
+            self._mcp_ready = probe_mcp_tools(self.weather_agent) and probe_mcp_tools(self.hotel_agent)
+            if self._mcp_ready:
+                print("   MCP 工具已就绪（天气/酒店走 Agent 调用）")
+            else:
+                print("   ⚠️ MCP 工具未注册成功，天气/酒店将直接走高德 REST 兜底")
+
         except Exception as e:
             print(f"❌ 多智能体系统初始化失败: {str(e)}")
             import traceback
@@ -379,43 +410,31 @@ class MultiAgentTripPlanner:
         if asyncio.iscoroutine(result):
             await result
 
-    async def _fallback_amap_weather(self, city: str) -> str:
-        """使用高德天气 HTTP REST API 直接获取天气, 作为 Google Weather 的降级备选。
+    async def _retrieve_rag_notes(self, city: str, request: TripRequest) -> str:
+        """检索城市游记知识库（RAG），返回可注入 Planner Prompt 的文本块。
 
-        跳过 MCP Agent 调用, 直接用 httpx 请求高德天气 API。
+        RAG 是增强项：未配置 embedding / 库为空 / 网络异常一律返回空字符串，
+        由调用方按「无命中」处理，绝不阻断行程生成主流程。
         """
-        import httpx
-        settings = get_settings()
-        amap_key = settings.vite_amap_web_key
-        if not amap_key:
-            return "高德 Web Key 未配置，无法降级查询天气"
-
-        # 很多时候 request.city 会带有国家/省份前缀，例如 "中国-北京"
-        # 高德天气 API 严格要求城市名或 adcode，所以我们提取最后一段
-        clean_city = city.split("-")[-1].strip()
-
-        # 高德天气 REST API: https://lbs.amap.com/api/webservice/guide/api/weatherinfo
-        url = "https://restapi.amap.com/v3/weather/weatherInfo"
-        params = {"key": amap_key, "city": clean_city, "extensions": "all", "output": "JSON"}
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.get(url, params=params)
-                data = resp.json()
-            forecasts = data.get("forecasts", [])
-            if not forecasts:
-                return f"高德天气 API 无预报数据: {json.dumps(data, ensure_ascii=False)}"
-            casts = forecasts[0].get("casts", [])
-            result_lines = []
-            for c in casts:
-                result_lines.append(
-                    f"{c.get('date','')}: 白天{c.get('dayweather','')} {c.get('daytemp','')}°C, "
-                    f"夜间{c.get('nightweather','')} {c.get('nighttemp','')}°C, "
-                    f"{c.get('daywind','')}风 {c.get('daypower','')}"
-                )
-            return "\n".join(result_lines) if result_lines else json.dumps(data, ensure_ascii=False)
+            from ..services.rag import rag_available, retrieve_notes_for_city
+
+            available, reason = rag_available()
+            if not available:
+                print(f"  ℹ️ RAG 未启用: {reason}")
+                return ""
+
+            record_retrieval()
+            return await asyncio.to_thread(
+                retrieve_notes_for_city,
+                city,
+                request.preferences,
+                request.free_text_input or "",
+            )
         except Exception as e:
-            return f"高德天气降级 HTTP 请求失败: {e}"
-    
+            print(f"  ⚠️ RAG 游记检索失败（已跳过，不影响主流程）: {type(e).__name__}: {e}")
+            return ""
+
     async def plan_trip(
         self,
         request: TripRequest,
@@ -447,76 +466,97 @@ class MultiAgentTripPlanner:
             print(f"偏好: {', '.join(request.preferences) if request.preferences else '无'}")
             print(f"{'='*60}\n")
 
-            from ..services.xhs_service import search_xhs_attractions
+            from ..services.attraction_service import search_attractions
             keywords = request.preferences[0] if request.preferences else "景点"
             _lang = (getattr(request, 'language', 'zh') or 'zh').strip().lower().split('-')[0]
             _lang_hint = "" if _lang == "zh" else f" Please respond in {'English' if _lang == 'en' else _lang}."
 
             # ========== 按城市逐一搜集信息 ==========
             all_attractions: Dict[str, str] = {}
+            all_attraction_sources: Dict[str, str] = {}
+            all_rag_notes: Dict[str, str] = {}
             all_weather: Dict[str, str] = {}
             all_hotels: Dict[str, str] = {}
+            all_weather_sources: Dict[str, str] = {}
+            all_hotel_sources: Dict[str, str] = {}
 
             for idx, city_stay in enumerate(cities):
                 city = city_stay.city
-                # 计算当前城市对应的进度区间: 10 ~ 75 之间按城市均分
-                progress_base = int(10 + (idx / total_cities) * 65)
-                progress_step = max(int(65 / total_cities / 3), 3)
                 city_label = f" ({idx+1}/{total_cities})" if total_cities > 1 else ""
 
-                # [1] 景点搜索
+                # [1] 景点搜索（小红书 → 本地知识库 → 通用常识 三级降级，永不抛异常）
                 print(f"  [{idx+1}/{total_cities}] 正在搜索 {city} 的景点...")
                 await self._emit_progress(
                     progress_callback, "attraction_search",
                     f"正在搜索 {city} 的景点...{city_label}",
-                    progress_base
+                    _stage_progress("attraction_search", idx, total_cities)
                 )
-                attraction_response = await asyncio.to_thread(
-                    search_xhs_attractions, city, keywords, _lang
-                )
+                with stage_timer("attraction_search"):
+                    attraction_response, attraction_source = await asyncio.to_thread(
+                        search_attractions, city, keywords, _lang
+                    )
                 all_attractions[city] = attraction_response
-                print(f"📍 {city} 景点搜索结果: {attraction_response[:150]}...")
+                all_attraction_sources[city] = attraction_source
+                print(f"📍 {city} 景点数据来源={attraction_source}: {attraction_response[:150]}...")
 
-                # [2] 天气查询
+                # 数据源降级时补一条进度提示，避免前端看起来「卡住不动」
+                if attraction_source != "小红书":
+                    await self._emit_progress(
+                        progress_callback, "attraction_search",
+                        f"{city} 小红书不可用，已改用「{attraction_source}」...{city_label}",
+                        _stage_progress("attraction_search", idx, total_cities) + 1
+                    )
+
+                # [2] RAG 游记检索（增强项：失败只记日志，不影响主流程）
+                await self._emit_progress(
+                    progress_callback, "rag_search",
+                    f"正在检索 {city} 的游记攻略...{city_label}",
+                    _stage_progress("rag_search", idx, total_cities)
+                )
+                note_block = await self._retrieve_rag_notes(city, request)
+                if note_block:
+                    all_rag_notes[city] = note_block
+                    print(f"📚 {city} RAG 游记检索命中，已注入规划上下文")
+                else:
+                    all_rag_notes[city] = ""
+                    print(f"📚 {city} RAG 无命中，跳过注入")
+                # [3] 天气查询（Agent/MCP 优先 → 高德 REST 兜底）
                 print(f"  [{idx+1}/{total_cities}] 正在查询 {city} 的天气...")
                 await self._emit_progress(
                     progress_callback, "weather_search",
                     f"正在查询 {city} 的天气...{city_label}",
-                    progress_base + progress_step
+                    _stage_progress("weather_search", idx, total_cities)
                 )
-                weather_query = f"请查询{city}的天气信息{_lang_hint}"
-                weather_response = await asyncio.to_thread(self.weather_agent.run, weather_query)
-                print(f"🌤️  {city} 天气查询结果: {weather_response[:150]}...")
-
-                # Google 天气降级
-                _weather_fail_keywords = ("无法", "失败", "错误", "error", "unknown", "抱歉", "sorry")
-                if self.map_provider == "google" and any(kw in weather_response.lower() for kw in _weather_fail_keywords):
-                    print(f"  ⚠️ {city} Google 天气查询失败，降级到高德天气 API...")
-                    try:
-                        weather_response = await self._fallback_amap_weather(city)
-                        print(f"  ✅ {city} 高德天气降级成功: {weather_response[:150]}...")
-                    except Exception as _wb_err:
-                        print(f"  ❌ {city} 高德天气降级也失败: {_wb_err}")
+                with stage_timer("weather_search"):
+                    weather_response, weather_source = await get_weather(
+                        city, self.weather_agent, self._mcp_ready,
+                        start_date=request.start_date, end_date=request.end_date,
+                    )
                 all_weather[city] = weather_response
+                all_weather_sources[city] = weather_source
+                print(f"🌤️  {city} 天气数据来源={weather_source}: {weather_response[:150]}...")
 
-                # [3] 酒店搜索
+                # [4] 酒店搜索（Agent/MCP 优先 → 高德 REST 兜底）
                 print(f"  [{idx+1}/{total_cities}] 正在搜索 {city} 的酒店...")
                 await self._emit_progress(
                     progress_callback, "hotel_search",
                     f"正在搜索 {city} 的酒店...{city_label}",
-                    progress_base + progress_step * 2
+                    _stage_progress("hotel_search", idx, total_cities)
                 )
-                hotel_query = f"请搜索{city}的{request.accommodation}酒店{_lang_hint}"
-                hotel_response = await asyncio.to_thread(self.hotel_agent.run, hotel_query)
+                with stage_timer("hotel_search"):
+                    hotel_response, hotel_source = await get_hotels(
+                        city, request.accommodation, self.hotel_agent, self._mcp_ready
+                    )
                 all_hotels[city] = hotel_response
-                print(f"🏨 {city} 酒店搜索结果: {hotel_response[:150]}...")
+                all_hotel_sources[city] = hotel_source
+                print(f"🏨 {city} 酒店数据来源={hotel_source}: {hotel_response[:150]}...")
 
             print(f"\n✅ 全部 {total_cities} 个城市基础信息搜集完成\n")
 
             # ========== 统一规划阶段 ==========
             planning_label = "正在生成多城市行程计划..." if total_cities > 1 else "正在生成旅行计划..."
             print(f"📋 步骤4: {planning_label}")
-            await self._emit_progress(progress_callback, "planning", planning_label, 85)
+            await self._emit_progress(progress_callback, "planning", planning_label, _COLLECTION_PROGRESS_END + 5)
 
             # 加载用户历史偏好记忆（若开启）
             memory_snippet = ""
@@ -530,13 +570,18 @@ class MultiAgentTripPlanner:
                         print(f"⚠️  加载用户记忆失败: {_mem_err}")
                         memory_snippet = ""
 
-            planner_response = await self._run_planner_with_retry(
-                request,
-                all_attractions,
-                all_weather,
-                all_hotels,
-                memory_snippet,
-            )
+            with stage_timer("planning"):
+                planner_response = await self._run_planner_with_retry(
+                    request,
+                    all_attractions,
+                    all_weather,
+                    all_hotels,
+                    memory_snippet,
+                    all_rag_notes,
+                    all_attraction_sources,
+                    all_weather_sources,
+                    all_hotel_sources,
+                )
             print(f"行程规划结果: {planner_response[:300]}...\n")
 
             # 解析最终计划
@@ -584,6 +629,10 @@ class MultiAgentTripPlanner:
         weather: Dict[str, str],
         hotels: Dict[str, str],
         memory_snippet: str = "",
+        rag_notes: Optional[Dict[str, str]] = None,
+        attraction_sources: Optional[Dict[str, str]] = None,
+        weather_sources: Optional[Dict[str, str]] = None,
+        hotel_sources: Optional[Dict[str, str]] = None,
     ) -> str:
         """规划阶段使用更长超时，并在超时后重试一次。
 
@@ -592,9 +641,16 @@ class MultiAgentTripPlanner:
             weather: {city_name: 天气查询结果文本}
             hotels: {city_name: 酒店搜索结果文本}
             memory_snippet: 用户历史偏好文本，注入规划 Prompt
+            rag_notes: {city_name: 游记知识库检索结果文本}，RAG 增强上下文
+            attraction_sources: {city_name: 景点数据来源标签}
+            weather_sources: {city_name: 天气数据来源标签}
+            hotel_sources: {city_name: 酒店数据来源标签}
         """
         timeout = int(os.getenv("TRIP_PLANNER_TIMEOUT", "180"))
-        planner_query = self._build_planner_query(request, attractions, weather, hotels, memory_snippet)
+        planner_query = self._build_planner_query(
+            request, attractions, weather, hotels, memory_snippet, rag_notes,
+            attraction_sources, weather_sources, hotel_sources,
+        )
 
         try:
             return await asyncio.to_thread(
@@ -627,6 +683,10 @@ class MultiAgentTripPlanner:
         weather: Dict[str, str],
         hotels: Dict[str, str],
         memory_snippet: str = "",
+        rag_notes: Optional[Dict[str, str]] = None,
+        attraction_sources: Optional[Dict[str, str]] = None,
+        weather_sources: Optional[Dict[str, str]] = None,
+        hotel_sources: Optional[Dict[str, str]] = None,
     ) -> str:
         """构建行程规划查询（支持多城市）
 
@@ -635,7 +695,15 @@ class MultiAgentTripPlanner:
             weather: {city_name: 天气查询结果文本}
             hotels: {city_name: 酒店搜索结果文本}
             memory_snippet: 用户历史偏好文本
+            rag_notes: {city_name: 游记知识库检索结果文本}
+            attraction_sources: {city_name: 景点数据来源标签}
+            weather_sources: {city_name: 天气数据来源标签}
+            hotel_sources: {city_name: 酒店数据来源标签}
         """
+        rag_notes = rag_notes or {}
+        attraction_sources = attraction_sources or {}
+        weather_sources = weather_sources or {}
+        hotel_sources = hotel_sources or {}
         cities = request.cities
         total_cities = len(cities)
         is_multi_city = total_cities > 1
@@ -674,25 +742,52 @@ class MultiAgentTripPlanner:
         # 为每个城市附上搜集到的信息
         for cs in cities:
             city = cs.city
+            rag_block = (rag_notes.get(city) or "").strip()
+            _src = attraction_sources.get(city, "")
+            # 景点数据的来源标注：降级时提示模型保守处理
+            if _src == "小红书":
+                attraction_line = f"**{city} 景点信息（来源：小红书实时搜索）:**" if is_multi_city else "**景点信息（来源：小红书实时搜索）:**"
+            elif _src:
+                attraction_line = (
+                    f"**{city} 景点信息（来源：{_src}，非实时数据）:**"
+                    if is_multi_city
+                    else f"**景点信息（来源：{_src}，非实时数据）:**"
+                )
+            else:
+                attraction_line = f"**{city} 景点信息:**" if is_multi_city else "**景点信息:**"
+
             if is_multi_city:
                 query += f"""
 --- {city} ({cs.days}天) ---
-**{city} 景点信息:**
+{attraction_line}
 {attractions.get(city, '无')}
-**{city} 天气信息:**
+"""
+                if rag_block:
+                    query += f"""
+**{city} 游记攻略检索（事实依据）:**
+{rag_block}
+"""
+                query += f"""
+**{city} 天气信息（来源：{weather_sources.get(city, '未知')}）:**
 {weather.get(city, '无')}
-**{city} 酒店信息:**
+**{city} 酒店信息（来源：{hotel_sources.get(city, '未知')}）:**
 {hotels.get(city, '无')}
 """
             else:
                 query += f"""
-**景点信息:**
+{attraction_line}
 {attractions.get(city, '无')}
-
-**天气信息:**
+"""
+                if rag_block:
+                    query += f"""
+**游记攻略检索（事实依据）:**
+{rag_block}
+"""
+                query += f"""
+**天气信息（来源：{weather_sources.get(city, '未知')}）:**
 {weather.get(city, '无')}
 
-**酒店信息:**
+**酒店信息（来源：{hotel_sources.get(city, '未知')}）:**
 {hotels.get(city, '无')}
 """
 
@@ -705,6 +800,10 @@ class MultiAgentTripPlanner:
 5. 返回完整的JSON格式数据
 6. 景点的经纬度坐标要真实准确
 7. 如果天气或酒店信息不足，请基于保守、通用的旅行建议补齐，但不要输出"无法查询"之类的解释文字
+8. 若提供了「游记攻略检索」，其中的避坑提醒、预约要求、游玩时长、美食推荐要优先采纳并体现在行程描述与 reservation_tips 中
+9. **坐标必须来自「景点信息」中给出的 location 原文，严禁自行推算或照抄其他景点的坐标**：
+   若某个景点信息里没有 location，请把该景点的 location 写成 null（或省略该字段），不要编造数字
+10. 若景点信息标注了「非实时数据」，请在 description 或 reservation_tips 中提示用户自行核实门票与预约信息
 """
         if is_multi_city:
             query += """
@@ -827,75 +926,26 @@ JSON 的 key 名称保持英文不变，只翻译 value 中的文字。"""
         
         return ''.join(result)
 
-    def _repair_truncated_json(self, json_str: str) -> str:
-        """修复被 max_tokens 截断的不完整 JSON。
-
-        策略：
-        1. 如果最后一个字符在字符串值内部，先关闭该字符串。
-        2. 移除最后一个不完整的键值对（trailing comma 之后的碎片）。
-        3. 根据打开/关闭的括号差额，补齐缺失的 ] 和 }。
-        """
+    @staticmethod
+    def _balance_json_brackets(text: str) -> str:
+        """在非字符串区域统计未闭合的括号并逆序补齐（同时闭合未终止的字符串）。"""
         import re as _re
 
-        s = json_str.rstrip()
-        if not s:
-            return s
-
-        # --- Step 1: 关闭未终止的字符串 ---
+        stack: list = []
         in_str = False
         escape = False
-        for ch in s:
+        for ch in text:
             if escape:
                 escape = False
                 continue
             if ch == '\\':
-                escape = True
+                if in_str:
+                    escape = True
                 continue
             if ch == '"':
                 in_str = not in_str
-        if in_str:
-            # 去掉尾部可能的碎片转义符
-            s = s.rstrip('\\')
-            s += '"'
-
-        # --- Step 2: 移除尾部不完整的键值对碎片 ---
-        # 常见模式: 值字符串闭合后紧跟着换行但后面没有逗号/括号
-        # 或者尾部是 "key": 但缺少值
-        # 尝试反复去除尾部碎片直到以合法的 JSON 结构字符结尾
-        for _ in range(10):
-            stripped = s.rstrip()
-            if not stripped:
-                break
-            last = stripped[-1]
-            if last in ('}', ']', '"', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-                        'e', 'l', 's'):
-                # 'e' for true/false, 'l' for null, 's' unlikely but safe
-                break
-            # 当前尾部是非法字符(如冒号、逗号、空键名开头等)，回退一个 token
-            s = stripped[:-1]
-
-        # 移除尾部悬挂的逗号
-        s = _re.sub(r',\s*$', '', s)
-
-        # --- Step 3: 补齐缺失的闭合括号 ---
-        open_braces = s.count('{') - s.count('}')
-        open_brackets = s.count('[') - s.count(']')
-
-        # 更精确: 扫描非字符串中的括号
-        stack = []
-        in_str2 = False
-        esc2 = False
-        for ch in s:
-            if esc2:
-                esc2 = False
                 continue
-            if ch == '\\' and in_str2:
-                esc2 = True
-                continue
-            if ch == '"':
-                in_str2 = not in_str2
-                continue
-            if in_str2:
+            if in_str:
                 continue
             if ch in ('{', '['):
                 stack.append(ch)
@@ -904,12 +954,110 @@ JSON 的 key 名称保持英文不变，只翻译 value 中的文字。"""
             elif ch == ']' and stack and stack[-1] == '[':
                 stack.pop()
 
-        # 用精确的 stack 逆序关闭
+        result = text
+        if in_str:
+            result = result.rstrip('\\') + '"'
+        # 补括号前先去尾逗号：`{"a": 1,` 直接补成 `{"a": 1}` 是合法的，
+        # 若先补成 `{"a": 1,}` 反而非法，会迫使上层继续剥离而丢数据。
+        result = _re.sub(r',\s*$', '', result.rstrip())
         closing = [']' if c == '[' else '}' for c in reversed(stack)]
         if closing:
-            s += '\n' + ''.join(closing)
+            result += ''.join(closing)
+        return result
 
-        return s
+    def _repair_truncated_json(self, json_str: str) -> str:
+        """修复被 max_tokens 截断的不完整 JSON。
+
+        截断点可能落在任何位置（键名中间、冒号后、字符串值中间、嵌套数组里），
+        用正则穷举各种形态既脆弱又容易误删合法数据。
+
+        因此这里改用**「从尾部逐段剥离 + 每次尝试解析」**的策略：
+        每次剥掉一个残缺片段就补一次括号并尝试 json.loads，
+        第一个能解析的结果就是最优修复（保留尽可能多的数据）。
+
+        返回空字符串表示「无法修复」，由调用方的多级容错链继续尝试其他候选。
+
+        Raises:
+            ValueError: 输入为空。
+        """
+        import json as _json
+        import re as _re
+
+        head = json_str.rstrip()
+        if not head:
+            raise ValueError("待修复内容为空")
+
+        # 每次剥离「最后一个残缺片段」。
+        #
+        # 这里刻意**不用正则匹配尾巴**：`r',?\s*"[^"]+$'` 这类模式会跨引号段贪心
+        # （对 `{"a": 1, "b"` 会一路吞到 `"a`），得到错误边界。
+        # 改为按「最后一个逗号 / 容器起始」切段，只在最后一段内部处理，
+        # 从结构上杜绝跨段匹配。
+        #
+        # 另注：悬挂逗号（`{"a": 1,`）**不能**在这里剥离——补上 `}` 就合法，
+        # 提前删逗号反而会退化成 `{"a": 1` → 再剥就丢数据。因此逗号只在
+        # 「没有片段可剥」时才作为最后手段处理。
+        _FRAGMENT_PATTERNS = (
+            r'^\s*"[^"]*"\s*:\s*$',   # 最后一段是 `"days":`（键完整、值缺失）
+            r'^\s*"[^"]*"\s*$',       # 最后一段是 `"b"` / `"attrac"`（键无值）
+            r'^\s*"[^"]*$',           # 最后一段是 `"attrac`（键名被截断）
+            r'^\s*:\s*$',             # 最后一段是裸冒号
+        )
+
+        def _last_segment(text: str) -> tuple:
+            """按最后一个逗号（或容器起始）切出最后一段，返回 (前缀含分隔符, 最后一段)。
+
+            前缀**必须保留分隔符**：`{"a": 1, "b"` 剥掉 ` "b"` 后要得到
+            `{"a": 1`，若连逗号一起丢掉会变成 `{"a": 1 "b"` 这种非法结构。
+            """
+            cut = max(text.rfind(','), text.rfind('{'), text.rfind('['))
+            if cut < 0:
+                return '', text
+            return text[: cut + 1], text[cut + 1:]
+
+        def _strip_last_fragment(text: str) -> str:
+            prefix, segment = _last_segment(text)
+            baseline = segment.rstrip()
+            for pattern in _FRAGMENT_PATTERNS:
+                reduced = _re.sub(pattern, '', segment).rstrip()
+                # 必须与 baseline 比较（两侧都 rstrip）。
+                # 若误用 segment.lstrip() 比较：模式没匹配时 reduced 仍是
+                # ` "b"`，而 lstrip 后是 `"b"`，会被误判成「有变化」，
+                # 于是返回一个和输入相同的串，剥离循环原地卡死。
+                if reduced == baseline:
+                    continue
+                # 剥掉残段后前缀可能以逗号结尾，形成悬挂逗号 → 去掉
+                rebuilt = (prefix + reduced).rstrip()
+                return _re.sub(r',\s*$', '', rebuilt)
+            return text
+
+        def _usable(text: str) -> bool:
+            """解析结果必须非空——防止剥离过头，把数据全删光后退化成 `{}`。"""
+            if not text.strip():
+                return False
+            try:
+                parsed = _json.loads(text)
+            except Exception:
+                return False
+            if isinstance(parsed, (dict, list)) and not parsed:
+                return False
+            return True
+
+        current = head
+        for _ in range(60):
+            candidate = self._balance_json_brackets(current)
+            if _usable(candidate):
+                return candidate
+
+            stripped = _strip_last_fragment(current)
+            if stripped == current:
+                # 没有片段可剥，才处理悬挂标点（尾逗号等）
+                stripped = _re.sub(r'[,:]\s*$', '', current.rstrip())
+            if stripped == current or not stripped:
+                break
+            current = stripped
+
+        return ""
 
     def _llm_repair_json(self, broken_json: str) -> str:
         """使用 LLM 修复无法自动修复的 JSON（最后手段）"""
@@ -994,7 +1142,10 @@ JSON 的 key 名称保持英文不变，只翻译 value 中的文字。"""
                     # 没有闭合的 }，取到末尾（截断场景）
                     json_str = response[json_start:]
             else:
-                raise ValueError("响应中未找到JSON数据")
+                # 响应里根本没有 JSON（模型答非所问 / 直接道歉）。
+                # 与「解析失败」同样处理：返回骨架而不是抛异常，前端可展示提示。
+                print("⚠️  响应中未找到 JSON 数据，返回兜底计划骨架")
+                return self._create_fallback_plan(request)
             
             # ====== 第1轮：基础清理 + 解析 ======
             json_str = self._sanitize_json_str(json_str)
@@ -1034,6 +1185,7 @@ JSON 的 key 名称保持英文不变，只翻译 value 中的文字。"""
                     data = json.loads(candidate)
                     if attempt_name != "基础清理":
                         print(f"✅ JSON 通过「{attempt_name}」成功解析")
+                        record_json_repair(attempt_name)
                     # 转换为TripPlan对象
                     return TripPlan(**data)
                 except (json.JSONDecodeError, Exception) as e:
@@ -1054,10 +1206,32 @@ JSON 的 key 名称保持英文不变，只翻译 value 中的文字。"""
             try:
                 data = json.loads(llm_fixed)
                 print("✅ JSON 通过 LLM 修复成功解析")
+                record_json_repair("LLM 修复")
                 return TripPlan(**data)
             except Exception as e_llm:
                 print(f"⚠️  LLM 修复后仍然解析失败: {e_llm}")
-                # 最终 raise 最初的错误
+
+            # ====== 兜底：语法已合法但缺必填字段 ======
+            # 截断点落在尾部、恰好砍掉必填字段时（如 overall_suggestions），
+            # 上面所有修复都会因 pydantic 校验失败而前功尽弃。
+            # 这些字段缺失不致命——补默认值远好于让整个任务失败。
+            for data in self._candidate_dicts(parse_attempts, llm_fixed):
+                filled = self._fill_required_defaults(data, request)
+                try:
+                    print("✅ JSON 语法合法但缺必填字段，已补默认值后解析成功")
+                    return TripPlan(**filled)
+                except Exception:
+                    continue
+
+            # ====== 最后手段：兜底骨架 ======
+            # 注意这是「无内容但结构真实」的骨架，不是编造出来的行程。
+            # 之所以不直接抛异常：前端已能识别空 attractions 并展示提示，
+            # 让用户看到「日期/城市结构 + 明确失败说明」比一个错误页更有用。
+            print("⚠️  所有解析手段均失败，返回兜底计划骨架（不含编造内容）")
+            try:
+                return self._create_fallback_plan(request)
+            except Exception as e_fallback:
+                print(f"⚠️  兜底计划生成失败: {e_fallback}")
                 raise ValueError(f"行程 JSON 解析失败: {str(last_error)}") from last_error
             
         except ValueError:
@@ -1066,50 +1240,100 @@ JSON 的 key 名称保持英文不变，只翻译 value 中的文字。"""
             print(f"⚠️  解析响应失败: {str(e)}")
             raise ValueError(f"行程 JSON 解析失败: {str(e)}") from e
     
+    @staticmethod
+    def _candidate_dicts(parse_attempts, extra_text: str = ""):
+        """把各级修复候选里「语法合法」的结果逐个 yield 成 dict。
+
+        用于最后兜底：语法没问题、只是缺必填字段的场景。
+        """
+        import json as _json
+
+        seen = set()
+        texts = [candidate for _, candidate in parse_attempts]
+        if extra_text:
+            texts.append(extra_text)
+        for text in texts:
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            try:
+                data = _json.loads(text)
+            except Exception:
+                continue
+            if isinstance(data, dict):
+                yield data
+
+    @staticmethod
+    def _fill_required_defaults(data: dict, request: TripRequest) -> dict:
+        """为缺失的必填字段补上安全默认值（只补结构字段，不编造内容）。"""
+        filled = dict(data)
+        filled.setdefault("city", (request.cities[0].city if request.cities else request.city) or "")
+        filled.setdefault("cities", [cs.city for cs in request.cities] or [filled["city"]])
+        filled.setdefault("start_date", request.start_date)
+        filled.setdefault("end_date", request.end_date)
+        filled.setdefault("days", [])
+        filled.setdefault("weather_info", [])
+        # 用中性措辞，避免假装模型真的给出过建议
+        filled.setdefault("overall_suggestions", "（模型未返回总结，建议出行前自行核实门票与预约信息）")
+        return filled
+
     def _create_fallback_plan(self, request: TripRequest) -> TripPlan:
-        """创建备用计划(当Agent失败时)"""
+        """创建兜底计划骨架（解析彻底失败时的最后手段）。
+
+        **刻意不编造景点、坐标、餐饮与价格**：
+        原实现会生成「{城市}景点1」这种假景点，并附上写死的北京坐标
+        （116.4, 39.9）——那正是本项目一直要防的坐标幻觉，比没有计划更糟。
+
+        这里只保留**真实已知的结构信息**（城市、日期、交通、住宿偏好），
+        其余留空并明确说明原因，由前端展示提示、用户决定是否重新生成。
+        """
         from datetime import datetime, timedelta
-        
-        # 解析日期
-        start_date = datetime.strptime(request.start_date, "%Y-%m-%d")
-        
-        # 创建每日行程
+
+        try:
+            start_date = datetime.strptime(request.start_date, "%Y-%m-%d")
+        except Exception:
+            start_date = None
+
+        city_names = [cs.city for cs in request.cities] or ([request.city] if request.city else [])
+        notice = "本次未能生成具体行程安排（模型输出无法解析），请重新生成。"
+
         days = []
-        for i in range(request.travel_days):
-            current_date = start_date + timedelta(days=i)
-            
-            day_plan = DayPlan(
-                date=current_date.strftime("%Y-%m-%d"),
-                day_index=i,
-                description=f"第{i+1}天行程",
-                transportation=request.transportation,
-                accommodation=request.accommodation,
-                attractions=[
-                    Attraction(
-                        name=f"{request.city}景点{j+1}",
-                        address=f"{request.city}市",
-                        location=Location(longitude=116.4 + i*0.01 + j*0.005, latitude=39.9 + i*0.01 + j*0.005),
-                        visit_duration=120,
-                        description=f"这是{request.city}的著名景点",
-                        category="景点"
-                    )
-                    for j in range(2)
-                ],
-                meals=[
-                    Meal(type="breakfast", name=f"第{i+1}天早餐", description="当地特色早餐"),
-                    Meal(type="lunch", name=f"第{i+1}天午餐", description="午餐推荐"),
-                    Meal(type="dinner", name=f"第{i+1}天晚餐", description="晚餐推荐")
-                ]
+        for i in range(max(1, request.travel_days)):
+            date_str = (
+                (start_date + timedelta(days=i)).strftime("%Y-%m-%d")
+                if start_date
+                else request.start_date
             )
-            days.append(day_plan)
-        
+            day_city = ""
+            if request.cities:
+                # 按各城市停留天数推算当天所在城市
+                offset = 0
+                for cs in request.cities:
+                    if i < offset + cs.days:
+                        day_city = cs.city
+                        break
+                    offset += cs.days
+            days.append(
+                DayPlan(
+                    date=date_str,
+                    day_index=i,
+                    city=day_city,
+                    description=notice,
+                    transportation=request.transportation,
+                    accommodation=request.accommodation,
+                    attractions=[],
+                    meals=[],
+                )
+            )
+
         return TripPlan(
-            city=request.city,
+            city=city_names[0] if city_names else "",
+            cities=city_names,
             start_date=request.start_date,
             end_date=request.end_date,
             days=days,
             weather_info=[],
-            overall_suggestions=f"这是为您规划的{request.city}{request.travel_days}日游行程,建议提前查看各景点的开放时间。"
+            overall_suggestions=notice,
         )
 
 

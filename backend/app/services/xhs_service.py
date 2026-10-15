@@ -316,6 +316,176 @@ def get_note_detail_ssr(note_id: str) -> dict:
 
 # ============ 景点搜索核心函数 ============
 
+# ============ 景点提纯（LLM）与坐标补齐 ============
+
+# 提纯 Prompt 的两份模板。字段完全一致，只有「接地约束」不同：
+# - notes: 给定游记文本（小红书 / 本地知识库），要求严格依据原文
+# - search: 给定城市与关键词，让模型自行检索回忆（小红书不可用时的通用兜底）
+_EXTRACT_FIELD_SPEC = """数组中每个对象必须包含以下字段:
+"name": 景点官方名称(用于前端展示，按目标语言填写；若目标语言为中文则与 name_zh 相同)
+"name_zh": 景点的中文简体名称(必须是简体中文，例如 "故宫博物院"。此字段始终为中文，不受目标语言影响)
+"name_en": 景点的英文名称(必须是英文，使用景点在国际上通用的官方英文名，例如 "The Palace Museum"。此字段始终为英文，不受目标语言影响)
+"reason": 真实用户的评价/避坑指南
+"duration": 游玩时长(数字, 分钟)
+"reservation_required": 是否需要提前预约(布尔值 true/false)。请根据文本中提到的"需要预约"、"提前预约"、"抢票"、"约满"、"官方预约"等关键词判断，如果未提及则默认为 false
+"reservation_tips": 预约相关提示(字符串)。如果需要预约，请提取预约渠道、提前天数等具体信息；如果不需要预约则填空字符串"""
+
+_EXTRACT_SCHEMA_EXAMPLE = """[
+  {{"name": "故宫博物院", "name_zh": "故宫博物院", "name_en": "The Palace Museum", "reason": "必去打卡，建议走中轴线。", "duration": 240, "reservation_required": true, "reservation_tips": "需要提前7天在故宫官网或微信小程序预约，每日限流8万人"}},
+  {{"name": "老君山金顶", "name_zh": "老君山金顶", "name_en": "Laojun Mountain Golden Summit", "reason": "网红打卡点，夜景绝美，必须坐索道上山。", "duration": 180, "reservation_required": false, "reservation_tips": ""}}
+]"""
+
+
+def _build_translation_instruction(language: str) -> str:
+    """构建按目标语言翻译的附加指令（中文目标语言返回空串）。"""
+    _lang = (language or "zh").strip().lower().split("-")[0]
+    _lang_names = {"en": "English", "ja": "Japanese", "ko": "Korean", "fr": "French", "de": "German", "es": "Spanish"}
+    if _lang == "zh" or _lang not in _lang_names:
+        return ""
+    return f"""
+**极其重要的翻译要求:**
+目标语言为 {_lang_names[_lang]}。你必须将提取结果中的 "name", "reason", "reservation_tips" 字段的内容翻译为 {_lang_names[_lang]}。
+- "name" 字段使用目标语言 {_lang_names[_lang]} 的景点名称（例如中文"故宫博物院" → English "The Palace Museum"）。
+- "reason" 和 "reservation_tips" 也必须翻译为 {_lang_names[_lang]}。
+- "duration" 和 "reservation_required" 保持原始数值/布尔值不变。
+- **注意**: "name_zh" 必须始终保持简体中文名称，"name_en" 必须始终保持英文名称，不受目标语言影响！
+- 严格保持 JSON schema 格式不变！
+"""
+
+
+def _extract_attractions_from_text(
+    source_text: str,
+    city: str,
+    *,
+    source_label: str,
+    grounding_rule: str,
+    language: str = "zh",
+) -> List[dict]:
+    """由 LLM 从给定文本中提纯结构化景点，并补齐经纬度坐标。
+
+    小红书与本地知识库两条数据源共用此函数，保证字段、地理编码与语言处理完全一致，
+    唯一差异是 grounding_rule（防幻觉的接地约束措辞）。
+
+    Args:
+        source_text: 供提纯的原文（游记正文 / 检索片段）
+        city: 所在城市，用于地理编码限定范围
+        source_label: 数据源名称，写入 Prompt 与日志，便于定位问题
+        grounding_rule: 防幻觉约束
+        language: 目标输出语言
+
+    Returns:
+        景点 dict 列表；提纯失败（LLM 报错 / JSON 不可解析）返回空列表，由调用方决定后续降级。
+    """
+    if not (source_text or "").strip():
+        return []
+
+    llm = get_llm()
+    prompt = f"""请从以下{source_label}中，提纯出真实存在的【游玩景点】。
+{grounding_rule}
+要求返回严格的 JSON 数组格式(哪怕只提取到了1个)，切勿返回除了JSON以外的任何冗余 markdown 文字！
+{_build_translation_instruction(language)}
+{_EXTRACT_FIELD_SPEC}
+
+**地理编码辅助字段说明:**
+name_zh 和 name_en 将分别用于不同地图服务商(高德/Google)的地理定位，请务必准确填写！
+- name_zh 必须是中文简体名称
+- name_en 必须是英文名称，优先使用国际通用的官方英文名
+
+{source_label}内容如下:
+{source_text}
+
+JSON 返回示例:
+{_EXTRACT_SCHEMA_EXAMPLE}
+"""
+    try:
+        content = llm.invoke(
+            [{"role": "user", "content": prompt}],
+            temperature=0.1,
+            stream=False,
+        )
+        json_match = re.search(r"\[.*\]", content, re.DOTALL)
+        extracted = json.loads(json_match.group()) if json_match else json.loads(content)
+    except Exception as e:
+        print(f"❌ [{source_label}] 景点提纯失败 ({city}): {e}")
+        return []
+
+    valid_items = [item for item in extracted if isinstance(item, dict) and item.get("name")]
+    if not valid_items:
+        return []
+
+    def _resolve_location(item: dict) -> Optional[dict]:
+        """解析景点坐标：地理编码优先，失败后用 POI 搜索兜底。
+
+        高德 geocode 对「海舌公园」这类非行政地名会返回 ENGINE_RESPONSE_DATA_ERROR，
+        而 place/text 能搜到；缺坐标会让 Planner 自行编造，因此这里必须尽力拿到。
+        """
+        name = item["name"]
+        names = [item.get("name_zh") or name, name, item.get("name_en") or name]
+        try:
+            loc = geocode_amap(
+                name,
+                city,
+                name_zh=item.get("name_zh", name),
+                name_en=item.get("name_en", name),
+            )
+            if loc:
+                return loc
+        except Exception as geo_err:
+            print(f"地理编码异常 ({name}): {geo_err}")
+
+        try:
+            from .amap_rest_service import resolve_poi_location
+
+            poi_loc = resolve_poi_location(names, city)
+            if poi_loc:
+                print(f"  ↪ POI 搜索补齐坐标成功: {name} -> {poi_loc}")
+                return poi_loc
+        except Exception as poi_err:
+            print(f"POI 坐标兜底异常 ({name}): {poi_err}")
+
+        print(f"  ⚠️ 无法解析坐标（geocode 与 POI 均失败）: {name}")
+        return None
+
+    with ThreadPoolExecutor(max_workers=min(3, len(valid_items))) as pool:
+        locations = list(pool.map(_resolve_location, valid_items))
+
+    for item, loc in zip(valid_items, locations):
+        if loc:
+            item["location"] = loc
+    return valid_items
+
+
+def format_attractions_block(items: List[dict], city: str, source: str, language: str = "zh") -> str:
+    """把结构化景点列表格式化为回传给 Planner 的文本块（与小红书路径格式保持一致）。
+
+    Args:
+        items: _extract_attractions_from_text 的输出
+        city: 城市名
+        source: 来源标签（小红书 / 本地知识库 / 通用常识）
+        language: 目标语言，决定抬头文案
+    """
+    header = {
+        "xhs": f"这是{source}热门精选游记的提取结果，附带确切坐标（图片由前端单独搜索获取）：",
+        "rag": f"这是{source}的检索结果，附带确切坐标（图片由前端单独搜索获取）：",
+        "generic": f"这是{source}生成的景点建议（未能获取实时游记数据，坐标可能缺失，请规划时保守处理）：",
+    }
+    lines = [header.get(_source_key(source), f"这是{source}的提取结果：")]
+    for item in items:
+        lines.append(json.dumps(item, ensure_ascii=False))
+    return "\n".join(lines) + "\n"
+
+
+def _source_key(source: str) -> str:
+    """把来源中文标签映射为 header key。"""
+    if "小红书" in source:
+        return "xhs"
+    if "常识" in source:
+        return "generic"
+    return "rag"
+
+
+# ============ 景点搜索核心函数 ============
+
 def search_xhs_attractions(city: str, keywords: str, language: str = "zh") -> str:
     """
     搜索小红书笔记，使用大模型极速提纯出结构化景点，
@@ -374,100 +544,23 @@ def search_xhs_attractions(city: str, keywords: str, language: str = "zh") -> st
         raise XHSFetchError(f"小红书数据抓取失败: {e}") from e
 
     if not combined_text:
-        return f"未在小红书检索到关于 {city} {keywords} 的内容。"
+        raise XHSFetchError(f"小红书未检索到关于 {city} {keywords} 的内容")
 
-    # ======== 轻量级提取过程 ========
+    # ======== 轻量级提取过程（与知识库路径共用） ========
     print(f"🧠 [XHS_SERVICE] 正在调用内联模型提纯小红书游记参数...")
-    llm = get_llm()
-
-    # 根据目标语言构建翻译附加指令
-    _lang = (language or "zh").strip().lower().split("-")[0]
-    _lang_names = {"en": "English", "ja": "Japanese", "ko": "Korean", "fr": "French", "de": "German", "es": "Spanish"}
-    if _lang != "zh" and _lang in _lang_names:
-        translation_instruction = f"""
-**极其重要的翻译要求:**
-目标语言为 {_lang_names[_lang]}。你必须将提取结果中的 "name", "reason", "reservation_tips" 字段的内容翻译为 {_lang_names[_lang]}。
-- "name" 字段使用目标语言 {_lang_names[_lang]} 的景点名称（例如中文"故宫博物院" → English "The Palace Museum"）。
-- "reason" 和 "reservation_tips" 也必须翻译为 {_lang_names[_lang]}。
-- "duration" 和 "reservation_required" 保持原始数值/布尔值不变。
-- **注意**: "name_zh" 必须始终保持简体中文名称，"name_en" 必须始终保持英文名称，不受目标语言影响！
-- 严格保持 JSON schema 格式不变！
-"""
-    else:
-        translation_instruction = ""
-
-    extract_prompt = f"""
-请从以下真实的素人小红书打卡游记中，提纯出真实存在的【游玩景点】。
-要求返回严格的 JSON 数组格式(哪怕只提取到了1个)，切勿返回除了JSON以外的任何冗余 markdown 文字！
-{translation_instruction}
-数组中每个对象必须包含以下字段:
-"name": 景点官方名称(用于前端展示，按目标语言填写；若目标语言为中文则与 name_zh 相同)
-"name_zh": 景点的中文简体名称(必须是简体中文，例如 "故宫博物院"。此字段始终为中文，不受目标语言影响)
-"name_en": 景点的英文名称(必须是英文，使用景点在国际上通用的官方英文名，例如 "The Palace Museum"。此字段始终为英文，不受目标语言影响)
-"reason": 小红书用户的真实评价/避坑指南
-"duration": 游玩时长(数字, 分钟)
-"reservation_required": 是否需要提前预约(布尔值 true/false)。请根据游记中提到的"需要预约"、"提前预约"、"抢票"、"约满"、"官方预约"等关键词判断，如果游记未提及则默认为 false
-"reservation_tips": 预约相关提示(字符串)。如果需要预约，请提取预约渠道、提前天数等具体信息；如果不需要预约则填空字符串
-
-**地理编码辅助字段说明:**
-name_zh 和 name_en 将分别用于不同地图服务商(高德/Google)的地理定位，请务必准确填写！
-- name_zh 必须是中文简体名称
-- name_en 必须是英文名称，优先使用国际通用的官方英文名
-
-游记杂文内容如下:
-{combined_text}
-
-JSON 返回示例:
-[
-  {{"name": "故宫博物院", "name_zh": "故宫博物院", "name_en": "The Palace Museum", "reason": "必去打卡，建议走中轴线。", "duration": 240, "reservation_required": true, "reservation_tips": "需要提前7天在故宫官网或微信小程序预约，每日限流8万人"}},
-  {{"name": "老君山金顶", "name_zh": "老君山金顶", "name_en": "Laojun Mountain Golden Summit", "reason": "网红打卡点，夜景绝美，必须坐索道上山。", "duration": 180, "reservation_required": false, "reservation_tips": ""}}
-]
-"""
-    try:
-        content = llm.invoke(
-            [{"role": "user", "content": extract_prompt}],
-            temperature=0.1,
-            stream=False,
-        )
-
-        json_match = re.search(r'\[.*\]', content, re.DOTALL)
-        if json_match:
-            extracted = json.loads(json_match.group())
-        else:
-            extracted = json.loads(content)
-
-        valid_items = [item for item in extracted if item.get("name")]
-
-        def _resolve_location(item: dict) -> Optional[dict]:
-            name = item["name"]
-            try:
-                return geocode_amap(
-                    name,
-                    city,
-                    name_zh=item.get("name_zh", name),
-                    name_en=item.get("name_en", name),
-                )
-            except Exception as geo_err:
-                print(f"地理编码异常 ({name}): {geo_err}")
-                return None
-
-        locations: List[Optional[dict]] = []
-        if valid_items:
-            with ThreadPoolExecutor(max_workers=min(3, len(valid_items))) as pool:
-                locations = list(pool.map(_resolve_location, valid_items))
-
-        final_result = f"这是小红书热门精选游记的提取结果，附带确切坐标（图片由前端单独搜索获取）：\n"
-        for item, loc in zip(valid_items, locations):
-            if loc:
-                item["location"] = loc
-            final_result += json.dumps(item, ensure_ascii=False) + "\n"
-
-        print(f"✅ [XHS_SERVICE] 小红书数据挖掘完毕，已装载进上下文。")
-        return final_result
-
-    except Exception as e:
-        print(f"❌ 大模型提纯小红书数据异常: {e}")
+    items_out = _extract_attractions_from_text(
+        combined_text,
+        city,
+        source_label="真实的素人小红书打卡游记",
+        grounding_rule="只能提取文中真实提到的景点，不要编造。",
+        language=language,
+    )
+    if not items_out:
         return "尝试提取小红书结构化数据失败，降级回常规处理。"
+
+    print(f"✅ [XHS_SERVICE] 小红书数据挖掘完毕，已装载进上下文。")
+    return format_attractions_block(items_out, city, "小红书", language)
+
 
 
 # ============ 景点搜图 ============

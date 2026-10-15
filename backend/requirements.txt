@@ -1,6 +1,8 @@
 hello-agents[protocols]>=0.2.4,<=0.2.9
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
+# llm_service / embedding 直接 import openai，必须显式声明
+openai>=1.30.0
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
 httpx[socks]>=0.27.0
@@ -16,3 +18,7 @@ pypinyin>=0.55.0
 PyExecJS>=1.5.1
 requests>=2.31.0
 aiosqlite>=0.20.0
+# RAG 检索：ChromaDB 向量库（embedding/rerank 走硅基流动 HTTP API）
+chromadb>=0.5
+# 测试
+pytest>=8.0.0

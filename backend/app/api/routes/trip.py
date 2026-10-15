@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
 from ...agents.trip_planner_agent import get_trip_planner_agent
 from ...models.schemas import TripPlanResponse, TripRequest
+from ...services import metrics
 from ...services.knowledge_graph_service import build_knowledge_graph
 
 router = APIRouter(prefix="/trip", tags=["旅行规划"])
@@ -346,6 +347,7 @@ async def _save_preferences_after_trip(user_id: str, request: TripRequest, trip_
 
 async def _run_trip_planning(task_id: str, request: TripRequest):
     """后台执行旅行规划并推送进度。"""
+    metrics.start_task(task_id)
     try:
         await _update_task_state(
             task_id,
@@ -399,9 +401,19 @@ async def _run_trip_planning(task_id: str, request: TripRequest):
             result=trip_result,
         )
 
+        # 输出本次运行指标，供优化建立基线
+        summary = metrics.finish_task("completed")
+        if summary:
+            print("\n📊 本次任务指标：")
+            print(metrics.format_summary(summary))
+
     except Exception as e:
         print(f"❌ 任务 {task_id} 失败: {e}")
         traceback.print_exc()
+        summary = metrics.finish_task("failed", note=str(e))
+        if summary:
+            print("\n📊 失败任务指标：")
+            print(metrics.format_summary(summary))
 
         # 针对小红书 Cookie 过期异常做出特殊处理返回给前端
         try:
@@ -522,6 +534,20 @@ async def get_task_status(task_id: str):
         "stage": task.get("stage", ""),
         "progress": task.get("progress", 0),
         "progress_text": task.get("message", "处理中..."),
+    }
+
+
+@router.get(
+    "/metrics",
+    summary="运行指标",
+    description="最近行程生成任务的运行指标：LLM 调用次数与耗时、数据源/降级分布、JSON 修复命中、阶段耗时",
+)
+async def get_metrics(limit: int = 10):
+    """导出运行指标，用于建立性能与成本基线。"""
+    safe_limit = max(1, min(int(limit or 10), 50))
+    return {
+        "aggregate": metrics.aggregate(safe_limit),
+        "recent": metrics.history(safe_limit),
     }
 
 
