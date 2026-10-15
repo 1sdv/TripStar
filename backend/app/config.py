@@ -9,8 +9,11 @@ from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 
 # 加载环境变量
-# 首先尝试加载当前目录的.env
-load_dotenv()
+# 显式指向 backend/.env，避免依赖进程 CWD（从仓库根目录或容器内启动时也能读到）
+_BACKEND_ENV = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(_BACKEND_ENV)
+# 兼容旧行为：再按 CWD 查找一次（不覆盖已加载的值）
+load_dotenv(override=False)
 
 # 然后尝试加载HelloAgents的.env(如果存在)
 helloagents_env = Path(__file__).parent.parent.parent.parent / "HelloAgents" / ".env"
@@ -23,7 +26,7 @@ class Settings(BaseSettings):
 
     # 应用基本配置
     app_name: str = "HelloAgents智能旅行助手"
-    app_version: str = "2.0.0"
+    app_version: str = "2.2.0"
     debug: bool = False
 
     # 服务器配置
@@ -62,6 +65,22 @@ class Settings(BaseSettings):
         default="gpt-4",
         validation_alias=AliasChoices("OPENAI_MODEL", "LLM_MODEL_ID"),
     )
+
+    # ========== RAG 检索配置 ==========
+    # 向量化与精排统一走硅基流动（Embedding 与 Rerank 共用同一个 Key 与 Base URL）。
+    # 注意：embedding_model 必须与建库时保持一致（现有库由 BAAI/bge-m3 写入，
+    # 维度 1024），换模型会导致向量空间不匹配、检索结果失效。
+    embedding_api_key: str = ""
+    embedding_base_url: str = "https://api.siliconflow.cn/v1"
+    embedding_model: str = "BAAI/bge-m3"
+    rerank_enabled: bool = True
+    rerank_model: str = "BAAI/bge-reranker-v2-m3"
+    rerank_timeout: float = 30.0
+    # 知识库目录；留空则默认 backend/data/chroma
+    chroma_dir: str = ""
+    # 注入行程生成的游记条数与候选池倍数
+    rag_top_k: int = 4
+    rag_candidate_mult: int = 4
 
     # 日志配置
     log_level: str = "INFO"

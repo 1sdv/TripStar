@@ -12,8 +12,9 @@ export interface Location {
 
 export interface Attraction {
   name: string
-  address: string
-  location: Location
+  address?: string
+  // 坐标可选：后端地理编码与 POI 兜底都失败时返回 null，前端渲染地图前需判空
+  location?: Location
   visit_duration: number
   description: string
   category?: string
