@@ -1,3 +1,5 @@
 backend/runtime_settings.json
+# npm 缓存（本地构建产物，不入库）
+.npm-cache/
 backend/data/trip_tasks
 backend/data/photo_cache
