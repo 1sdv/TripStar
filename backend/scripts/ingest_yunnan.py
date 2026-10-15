@@ -10,7 +10,8 @@
     # 3) 追加模式（不删同 post_id 旧块，一般不用）
     python backend/scripts/ingest_yunnan.py <素材目录> --no-replace
 
-支持的素材格式见 app/services/rag/ingest.py 的模块文档。
+支持的素材格式见同目录的 kb_samples_format.md；
+样例素材见 backend/data/kb_samples/（仅作格式参考，正式灌库请替换为自己的内容）。
 """
 
 import sys

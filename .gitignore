@@ -3,3 +3,6 @@ backend/runtime_settings.json
 .npm-cache/
 backend/data/trip_tasks
 backend/data/photo_cache
+# RAG 向量库（本地知识库数据，体积大且可重建，不入库）
+# 注意：backend/data/kb_samples/ 是灌库素材的格式样例，需要保留入库
+backend/data/chroma

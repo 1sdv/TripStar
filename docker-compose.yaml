@@ -18,6 +18,13 @@ services:
       - XHS_COOKIE=${XHS_COOKIE:-your_xhs_cookie_here}
       # 小红书数据源开关（默认关闭）：景点图片默认走高德官方图库
       - ENABLE_XHS=${ENABLE_XHS:-false}
+      # RAG 本地知识库（可选）：不配置 Key 时检索链路静默跳过，不影响行程生成
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
+      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-https://api.siliconflow.cn/v1}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-BAAI/bge-m3}
+      - RERANK_ENABLED=${RERANK_ENABLED:-true}
+      - RERANK_MODEL=${RERANK_MODEL:-BAAI/bge-reranker-v2-m3}
+      - RERANK_TIMEOUT=${RERANK_TIMEOUT:-30}
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
       - GOOGLE_MAPS_PROXY=${GOOGLE_MAPS_PROXY:-}
       - ENABLE_USER_MEMORY=${ENABLE_USER_MEMORY:-false}
@@ -31,6 +38,7 @@ services:
       - PORT=7860
       - LOG_LEVEL=INFO
     volumes:
+      # 运行时数据统一挂在 /app/backend/data（含 chroma 向量库、任务 JSON、图片缓存）
       - trip_data:/app/backend/data
     restart: unless-stopped
 
