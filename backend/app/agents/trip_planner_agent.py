@@ -658,6 +658,7 @@ class MultiAgentTripPlanner:
         query = f"""请根据以下信息生成{title}:
 
 **基本信息:**
+- 出发城市: {request.origin_city or '未提供'}
 - 途经城市及天数分配:
 {cities_desc}
 - 总天数: {request.travel_days}天
@@ -705,6 +706,11 @@ class MultiAgentTripPlanner:
 5. 返回完整的JSON格式数据
 6. 景点的经纬度坐标要真实准确
 7. 如果天气或酒店信息不足，请基于保守、通用的旅行建议补齐，但不要输出"无法查询"之类的解释文字
+"""
+        if request.origin_city:
+            query += f"""
+8. 结合出发城市“{request.origin_city}”与首个目的地，给出到达交通建议；返程建议也应回到该出发城市
+9. 只提供交通方式、预计时长和费用区间等可合理估算的信息，禁止编造具体车次、航班号或班次时间
 """
         if is_multi_city:
             query += """
