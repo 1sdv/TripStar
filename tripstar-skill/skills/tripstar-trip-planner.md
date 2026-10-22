@@ -15,6 +15,42 @@ TripStar 是一个"输入城市和日期 → 多智能体生成完整旅行计�
 - 要迁移知识图谱、天气看板、预算联动等纯前端渲染逻辑到别的项目。
 - 要排查"计划生成失败/JSON 解析失败/地图不显示/图片 403"这类问题。
 
+## ⛔ 硬性规则：缺配置时先停下来要配置，**绝不编造结果**
+
+这是本项目最容易被做错的地方：`.env` 不在（或 Key 是占位符）时，**不要**"按字段约定自己写一份行程"来交差。
+
+**禁止**（任何情况下）：
+
+- 编造 `TripPlan`（景点/坐标/天气/预算/餐饮/酒店）并当成项目真实输出；
+- 把 `assets/sample-result.json` 说成"刚生成的行程"；
+- 在 LLM / 小红书 Cookie / 高德 Key 缺失时声称"已生成攻略""计划已保存"；
+- 往 `backend/data/trip_tasks/` 写入伪造任务，冒充真实历史。
+
+**必须**（按顺序执行）：
+
+1. **先探测**：`pwsh scripts/check-credentials.ps1`（无 `.env` 时会直接 FAIL，并逐项打印获取路径）。
+   没有 `.env` 时先建模板：`Copy-Item backend\.env.example backend\.env`、`Copy-Item frontend\.env.example frontend\.env`。
+2. **报告缺口**：逐项说明缺哪个变量、会导致什么（表见「首次运行」一节），以及仓库里是否根本没 `.env`。
+3. **给获取指引**：指向 `references/12-credentials-setup.md` 对应小节 —— §1 高德（Web服务 Key / JS API Key / 安全密钥）、
+   §2 小红书 Cookie、§3 模型（Key/Base URL/Model，含方舟 `ep-xxxx` 说明）。
+4. **停下来等用户**：明确写"填好这 3 样后告诉我，我再启动后端把行程跑出来"。**不要**用占位数据继续推进。
+
+**唯一例外**（必须同时满足，否则仍按上面执行）：
+
+- 用户**明确**说只要看界面 / 离线预览 / 不需要真实数据；
+- 产物标注为 **demo / mock**，并说明数据来源（用 `assets/sample-result.json` 时写明"仓库内历史样例，非本次生成"）；
+- 不写入 `backend/data/`，不谎称已生成。
+
+**标准话术模板**（缺凭据时照抄改写即可）：
+
+> 当前仓库没有可用的 `.env` 凭据，因此**无法真实调用** TripStar 的多智能体后端（LLM、小红书 Cookie、高德 Key 均缺失）。
+> 需要你补齐 3 项后我才能生成真实行程：
+> 1. `backend/.env`：`LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL_ID`、`XHS_COOKIE`、`VITE_AMAP_WEB_KEY`
+> 2. `frontend/.env`：`VITE_AMAP_WEB_JS_KEY`、`VITE_AMAP_SECURITY_JS_CODE`
+> 3. 获取步骤见 `references/12-credentials-setup.md`（§1 高德 / §2 小红书 / §3 模型），填完跑
+>    `pwsh scripts/check-credentials.ps1 -Online` 应 0 FAIL。
+> 是否要我先把模板复制出来（`Copy-Item backend\.env.example backend\.env`）等你填？
+
 ## 首次运行：先备齐 4 个凭据（最容易卡住的一步）
 
 | 凭据 | 变量 | 放哪 | 不配的后果 |

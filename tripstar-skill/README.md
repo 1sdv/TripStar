@@ -57,7 +57,8 @@ tripstar-skill/
 - 想验证**结果页真的能展示**：打开 `/result?plan_id=<task_id>`，把 `scripts/ui-assert.js` 粘进控制台，
   期望 `28 pass / 0 fail`（实测基线见 11 §7）
 - 想离线看结果页：按 `skills/references/10-runbook.md` 第 6 节，把 `assets/sample-result.json`
-  写进 `sessionStorage` 后访问 `/result?plan_id=…`（无需后端与任何 Key）
+  写进 `sessionStorage` 后访问 `/result?plan_id=…`（无需后端与任何 Key）。
+  ⚠️ 它是**仓库内的历史样例**，只用于界面验证，**不是**新生成的行程——不要拿它冒充生成结果。
 - 想复刻展示页：直接照 `07-result-frontend.md` 的 12 章清单逐块实现
 
 ## 哪些文件该提交（push 前看这里）

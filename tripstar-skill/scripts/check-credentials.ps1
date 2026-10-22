@@ -84,6 +84,22 @@ $frontendEnv = Read-DotEnv $frontendEnvPath
 Write-Host "== TripStar 凭据体检 ==" -ForegroundColor Cyan
 Write-Host "仓库: $RepoRoot"
 Write-Host "backend/.env : $(if (Test-Path $backendEnvPath) { '存在' } else { '缺失' })   frontend/.env : $(if (Test-Path $frontendEnvPath) { '存在' } else { '缺失' })"
+
+# 两个 .env 都不存在：这是"零配置"场景，给出明确的停止指引
+if ((-not (Test-Path $backendEnvPath)) -and (-not (Test-Path $frontendEnvPath))) {
+  Write-Host ""
+  Write-Host "!! 检测不到任何 .env —— 本项目此时无法生成真实行程（LLM/小红书/高德 全部缺失）。" -ForegroundColor Red
+  Write-Host "   第一步：从模板复制（模板已带注释说明每项含义）" -ForegroundColor Yellow
+  Write-Host "     Copy-Item backend\.env.example  backend\.env"
+  Write-Host "     Copy-Item frontend\.env.example frontend\.env"
+  Write-Host "   第二步：按 references/12-credentials-setup.md 填入" -ForegroundColor Yellow
+  Write-Host "     §1 高德：VITE_AMAP_WEB_KEY（Web服务） / VITE_AMAP_WEB_JS_KEY + VITE_AMAP_SECURITY_JS_CODE（JS API）"
+  Write-Host "     §2 小红书：XHS_COOKIE（浏览器 Network 里复制 cookie 整行）"
+  Write-Host "     §3 模型：LLM_API_KEY / LLM_BASE_URL / LLM_MODEL_ID（任何 OpenAI 兼容平台）"
+  Write-Host "   第三步：填完重跑本脚本（加 -Online）直到 0 FAIL" -ForegroundColor Yellow
+  Write-Host "   ⛔ 在凭据就绪前，不要用编造数据冒充结果；仅界面演示请用 assets/sample-result.json 并标注 demo。" -ForegroundColor Red
+  Write-Host ""
+}
 Write-Host ""
 
 # ---------- 1. 高德 Web 服务 Key（后端） ----------
@@ -198,6 +214,14 @@ if ($Online) {
   # 后端生效配置：设置页写入 runtime_settings.json，优先级高于 .env
   $eff = $null
   try { $eff = (Invoke-RestMethod -Uri "$($BaseUrl.TrimEnd('/'))/api/settings" -TimeoutSec $TimeoutSec).data } catch { }
+  # 后端不可达时退回读设置页持久化的覆盖值（runtime_settings.json），避免拿 .env 旧值误判
+  if (-not $eff) {
+    $rtFile = Join-Path $RepoRoot 'backend\runtime_settings.json'
+    if (Test-Path $rtFile) {
+      try { $eff = Get-Content $rtFile -Raw -Encoding UTF8 | ConvertFrom-Json } catch { }
+      if ($eff) { Write-Host "        （后端不可达，生效值取自 runtime_settings.json）" -ForegroundColor DarkGray }
+    }
+  }
 
   # LLM
   if ($llmKey) {
@@ -274,6 +298,7 @@ Write-Host ""
 Write-Host ("== 结果：{0} PASS / {1} WARN / {2} FAIL ==" -f $script:pass, $script:warn, $script:fail) -ForegroundColor $(if ($script:fail -eq 0) { 'Green' } else { 'Red' })
 if ($script:fail -gt 0) {
   Write-Host "下一步：按上面 FAIL 的提示补齐凭据；完整获取步骤见 references/12-credentials-setup.md" -ForegroundColor Yellow
+  Write-Host "⛔ 补齐前无法生成真实行程：请如实告知用户缺什么，不要编造 TripPlan 或用样例数据冒充结果。" -ForegroundColor Red
   exit 1
 }
 if (-not $Online) {
