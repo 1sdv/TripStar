@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "tripstar.guide",
+  "name": "TripStar 复刻指南",
+  "version": "1.0.0",
+  "description": "TripStar（HelloAgents 智能旅行规划）全栈实现指南：FastAPI 后端 + 多智能体规划 + 小红书取数 + 高德地图 + 知识图谱 + Vue3 结果展示页（不含 Google Maps 服务）。",
+  "main": "main.js",
+  "contributes": {
+    "skills": [
+      "skills/tripstar-trip-planner.md"
+    ]
+  },
+  "permissions": [
+    "agent.prompt.inject"
+  ],
+  "engines": {
+    "piDesktop": ">=0.1.0"
+  },
+  "activationEvents": [
+    "onStartup"
+  ]
+}

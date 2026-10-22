@@ -1,0 +1,900 @@
+{
+  "success": true,
+  "message": "旅行计划生成成功",
+  "plan_id": "6c83aff5",
+  "data": {
+    "city": "西安",
+    "cities": [
+      "西安"
+    ],
+    "start_date": "2026-09-16",
+    "end_date": "2026-09-18",
+    "days": [
+      {
+        "date": "2026-09-16",
+        "day_index": 0,
+        "city": "西安",
+        "is_transfer_day": false,
+        "transfer_info": "",
+        "description": "第1天漫步西安古城核心,触摸千年城墙,打卡钟楼地标,逛吃回民街感受烟火气",
+        "transportation": "地铁+步行,市内地铁2号线、6号线可达核心景点,景点间步行即可",
+        "accommodation": "经济型酒店",
+        "hotel": {
+          "name": "如家酒店（西安钟楼回民街店）",
+          "address": "西安市莲湖区西大街1号",
+          "location": {
+            "longitude": 108.945023,
+            "latitude": 34.262158
+          },
+          "price_range": "280-350元",
+          "rating": "4.3",
+          "distance": "距离钟楼500米",
+          "type": "经济型酒店",
+          "estimated_cost": 320
+        },
+        "attractions": [
+          {
+            "name": "西安城墙",
+            "address": "西安市碑林区南大街2号",
+            "location": {
+              "longitude": 108.925578,
+              "latitude": 34.252243
+            },
+            "visit_duration": 120,
+            "description": "作为西安城市标志性古迹,青砖城墙完整保留古都格局,视野开阔,可散步、骑行,俯瞰老城街巷全貌,傍晚光线柔和,拍照氛围感极佳,需提前通过官方平台预约门票",
+            "category": "历史古迹",
+            "rating": null,
+            "photos": [],
+            "poi_id": "",
+            "image_url": null,
+            "ticket_price": 54,
+            "reservation_required": true,
+            "reservation_tips": "建议提前通过官方平台预约门票"
+          },
+          {
+            "name": "钟楼",
+            "address": "西安市莲湖区东大街与西大街交汇处",
+            "location": {
+              "longitude": 108.948024,
+              "latitude": 34.263161
+            },
+            "visit_duration": 30,
+            "description": "西安老城核心地标,可感受古城传统风貌",
+            "category": "历史古迹",
+            "rating": null,
+            "photos": [],
+            "poi_id": "",
+            "image_url": null,
+            "ticket_price": 30,
+            "reservation_required": false,
+            "reservation_tips": ""
+          },
+          {
+            "name": "回民街",
+            "address": "西安市莲湖区北院门街道",
+            "location": {
+              "longitude": 108.943011,
+              "latitude": 34.264495
+            },
+            "visit_duration": 60,
+            "description": "地道西北美食聚集地,可体验古城烟火气息",
+            "category": "美食街区",
+            "rating": null,
+            "photos": [],
+            "poi_id": "",
+            "image_url": null,
+            "ticket_price": 0,
+            "reservation_required": false,
+            "reservation_tips": ""
+          }
+        ],
+        "meals": [
+          {
+            "type": "breakfast",
+            "name": "老潼关肉夹馍+豆浆",
+            "address": null,
+            "location": null,
+            "description": "酒店附近老字号早餐店,酥脆肉夹馍搭配现磨豆浆,开启活力一天",
+            "estimated_cost": 30
+          },
+          {
+            "type": "lunch",
+            "name": "羊肉泡馍",
+            "address": null,
+            "location": null,
+            "description": "回民街正宗泡馍店,亲手掰馍体验西北特色,汤汁浓郁肉质软烂",
+            "estimated_cost": 50
+          },
+          {
+            "type": "dinner",
+            "name": "洒金桥小吃套餐",
+            "address": null,
+            "location": null,
+            "description": "前往洒金桥品尝甑糕、胡辣汤、烤肉串等本地特色小吃,感受地道烟火气",
+            "estimated_cost": 80
+          }
+        ]
+      },
+      {
+        "date": "2026-09-17",
+        "day_index": 1,
+        "city": "西安",
+        "is_transfer_day": false,
+        "transfer_info": "",
+        "description": "第2天沉浸千年历史长河,探秘陕西历史博物馆珍贵文物,打卡大雁塔,夜游大唐不夜城感受盛唐风华",
+        "transportation": "地铁+步行,地铁2号线转3号线可达陕西历史博物馆,景点间步行或共享单车",
+        "accommodation": "经济型酒店",
+        "hotel": {
+          "name": "如家商旅酒店（西安大雁塔大唐不夜城店）",
+          "address": "西安市雁塔区小寨东路126号",
+          "location": {
+            "longitude": 108.960124,
+            "latitude": 34.219056
+          },
+          "price_range": "300-380元",
+          "rating": "4.4",
+          "distance": "距离大雁塔800米",
+          "type": "经济型酒店",
+          "estimated_cost": 340
+        },
+        "attractions": [
+          {
+            "name": "陕西历史博物馆",
+            "address": "西安市雁塔区小寨东路91号",
+            "location": {
+              "longitude": 108.957496,
+              "latitude": 34.222886
+            },
+            "visit_duration": 180,
+            "description": "馆藏丰富,涵盖多个朝代珍贵文物,直观感受中国黄金年代的历史底蕴,适合历史爱好者及带娃游览,需提前5天通过官方渠道预约门票",
+            "category": "博物馆",
+            "rating": null,
+            "photos": [],
+            "poi_id": "",
+            "image_url": null,
+            "ticket_price": 0,
+            "reservation_required": true,
+            "reservation_tips": "需提前5天通过官方渠道预约门票"
+          },
+          {
+            "name": "大雁塔",
+            "address": "西安市雁塔区慈恩西路大雁塔文化休闲景区内",
+            "location": {
+              "longitude": 108.964176,
+              "latitude": 34.218229
+            },
+            "visit_duration": 60,
+            "description": "唐代标志性古建筑,夜幕降临后周边夜景氛围感拉满,适合拍照打卡",
+            "category": "历史古迹",
+            "rating": null,
+            "photos": [],
+            "poi_id": "",
+            "image_url": null,
+            "ticket_price": 25,
+            "reservation_required": false,
+            "reservation_tips": ""
+          },
+          {
+            "name": "大唐不夜城",
+            "address": "西安市雁塔区慈恩路46号",
+            "location": {
+              "longitude": 108.964046,
+              "latitude": 34.213866
+            },
+            "visit_duration": 120,
+            "description": "唐风主题街区,夜景灯光璀璨,造景雕塑丰富,是西安夜景核心亮点,适合悠闲漫步、拍照打卡",
+            "category": "文化街区",
+            "rating": null,
+            "photos": [],
+            "poi_id": "",
+            "image_url": null,
+            "ticket_price": 0,
+            "reservation_required": false,
+            "reservation_tips": ""
+          }
+        ],
+        "meals": [
+          {
+            "type": "breakfast",
+            "name": "牛肉胡辣汤+葱油饼",
+            "address": null,
+            "location": null,
+            "description": "酒店附近本地早餐店,麻辣鲜香胡辣汤搭配酥脆葱油饼,暖身开胃",
+            "estimated_cost": 30
+          },
+          {
+            "type": "lunch",
+            "name": "Biangbiang面",
+            "address": null,
+            "location": null,
+            "description": "大雁塔周边陕菜馆,筋道宽面搭配浓郁臊子,分量十足",
+            "estimated_cost": 50
+          },
+          {
+            "type": "dinner",
+            "name": "陕菜套餐",
+            "address": null,
+            "location": null,
+            "description": "大唐不夜城内特色陕菜馆,品尝葫芦鸡、糖醋里脊等经典菜品",
+            "estimated_cost": 80
+          }
+        ]
+      },
+      {
+        "date": "2026-09-18",
+        "day_index": 2,
+        "city": "西安",
+        "is_transfer_day": false,
+        "transfer_info": "",
+        "description": "第3天奔赴临潼,探秘世界奇迹兵马俑,游览皇家园林华清宫,感受秦唐历史的厚重与浪漫",
+        "transportation": "公共交通,乘坐游5路（306路）公交车从西安火车站直达兵马俑、华清宫,景区间可乘坐免费摆渡车",
+        "accommodation": "经济型酒店（当日退房返程）",
+        "hotel": {
+          "name": "如家商旅酒店（西安大雁塔大唐不夜城店）",
+          "address": "西安市雁塔区小寨东路126号",
+          "location": {
+            "longitude": 108.960124,
+            "latitude": 34.219056
+          },
+          "price_range": "300-380元",
+          "rating": "4.4",
+          "distance": "距离大雁塔800米",
+          "type": "经济型酒店",
+          "estimated_cost": 0
+        },
+        "attractions": [
+          {
+            "name": "秦始皇帝陵博物院（兵马俑）",
+            "address": "西安市临潼区秦陵北路",
+            "location": {
+              "longitude": 109.282057,
+              "latitude": 34.386299
+            },
+            "visit_duration": 180,
+            "description": "世界级历史古迹,场馆陈列完整、文物震撼,直观感受秦代雕塑艺术与千年历史底蕴；游玩时需认准官方馆内解说,避免购买景区内假玉和劣质兵马俑摆件,需提前通过官方渠道预约门票",
+            "category": "历史古迹",
+            "rating": null,
+            "photos": [],
+            "poi_id": "",
+            "image_url": null,
+            "ticket_price": 120,
+            "reservation_required": true,
+            "reservation_tips": "需提前通过官方渠道预约门票"
+          },
+          {
+            "name": "华清宫",
+            "address": "西安市临潼区华清路38号",
+            "location": {
+              "longitude": 109.215759,
+              "latitude": 34.356728
+            },
+            "visit_duration": 90,
+            "description": "依山傍水,园林雅致,兼具自然山水与唐代历史典故,适合轻松闲逛缓解疲惫",
+            "category": "皇家园林",
+            "rating": null,
+            "photos": [],
+            "poi_id": "",
+            "image_url": null,
+            "ticket_price": 120,
+            "reservation_required": false,
+            "reservation_tips": ""
+          }
+        ],
+        "meals": [
+          {
+            "type": "breakfast",
+            "name": "豆浆油条+茶叶蛋",
+            "address": null,
+            "location": null,
+            "description": "酒店附近便民早餐点,简单便捷补充能量",
+            "estimated_cost": 30
+          },
+          {
+            "type": "lunch",
+            "name": "临潼大盘鸡",
+            "address": null,
+            "location": null,
+            "description": "兵马俑景区附近本地餐馆,分量十足大盘鸡搭配裤带面,风味独特",
+            "estimated_cost": 50
+          },
+          {
+            "type": "dinner",
+            "name": "小南门夜市小吃",
+            "address": null,
+            "location": null,
+            "description": "返回市区后前往小南门夜市,品尝甑糕、卤味、烤串等特色小吃",
+            "estimated_cost": 80
+          }
+        ]
+      }
+    ],
+    "weather_info": [
+      {
+        "date": "2026-09-16",
+        "city": "西安",
+        "day_weather": "晴",
+        "night_weather": "晴",
+        "day_temp": 23,
+        "night_temp": 11,
+        "wind_direction": "南风",
+        "wind_power": "1-3级"
+      },
+      {
+        "date": "2026-09-17",
+        "city": "西安",
+        "day_weather": "晴",
+        "night_weather": "晴",
+        "day_temp": 27,
+        "night_temp": 13,
+        "wind_direction": "西南风",
+        "wind_power": "1-3级"
+      },
+      {
+        "date": "2026-09-18",
+        "city": "西安",
+        "day_weather": "晴",
+        "night_weather": "晴",
+        "day_temp": 28,
+        "night_temp": 11,
+        "wind_direction": "西南风",
+        "wind_power": "1-3级"
+      }
+    ],
+    "overall_suggestions": "1. 所有需要预约的景点（西安城墙、陕西历史博物馆、兵马俑）务必提前按要求预约,避免耽误行程；2. 9月西安昼夜温差较大,建议携带薄外套；3. 临潼景点距离市区较远,建议早出发,预留充足时间；4. 品尝美食时选择本地人常去的街区,如洒金桥、小南门夜市,性价比更高；5. 市内出行优先选择地铁,便捷且避免拥堵；6. 参观兵马俑时建议租用官方讲解器,更好了解文物背景",
+    "budget": {
+      "total_attractions": 349,
+      "total_hotels": 660,
+      "total_meals": 480,
+      "total_transportation": 60,
+      "total_inter_city_transport": 0,
+      "total": 1549
+    }
+  },
+  "graph_data": {
+    "nodes": [
+      {
+        "id": "city_西安",
+        "name": "西安",
+        "category": 0,
+        "symbolSize": 70,
+        "itemStyle": {
+          "color": "#4A90D9"
+        },
+        "value": "2026-09-16 ~ 2026-09-18"
+      },
+      {
+        "id": "day_0",
+        "name": "第1天",
+        "category": 1,
+        "symbolSize": 45,
+        "itemStyle": {
+          "color": "#5B8FF9"
+        },
+        "value": "2026-09-16"
+      },
+      {
+        "id": "attr_0_0_西安城墙",
+        "name": "西安城墙",
+        "category": 2,
+        "symbolSize": 35,
+        "itemStyle": {
+          "color": "#5AD8A6"
+        },
+        "value": "西安市碑林区南大街2号 | 游览120分钟 | 门票¥54"
+      },
+      {
+        "id": "attr_0_1_钟楼",
+        "name": "钟楼",
+        "category": 2,
+        "symbolSize": 35,
+        "itemStyle": {
+          "color": "#5AD8A6"
+        },
+        "value": "西安市莲湖区东大街与西大街交汇处 | 游览30分钟 | 门票¥30"
+      },
+      {
+        "id": "attr_0_2_回民街",
+        "name": "回民街",
+        "category": 2,
+        "symbolSize": 35,
+        "itemStyle": {
+          "color": "#5AD8A6"
+        },
+        "value": "西安市莲湖区北院门街道 | 游览60分钟"
+      },
+      {
+        "id": "hotel_0_如家酒店（西安钟楼回民街店）",
+        "name": "如家酒店（西安钟楼回民街店）",
+        "category": 3,
+        "symbolSize": 35,
+        "itemStyle": {
+          "color": "#F6BD16"
+        },
+        "value": "280-350元 | ¥320/晚"
+      },
+      {
+        "id": "meal_0_0_老潼关肉夹馍+豆浆",
+        "name": "早餐: 老潼关肉夹馍+豆浆",
+        "category": 4,
+        "symbolSize": 25,
+        "itemStyle": {
+          "color": "#E8684A"
+        },
+        "value": "¥30"
+      },
+      {
+        "id": "meal_0_1_羊肉泡馍",
+        "name": "午餐: 羊肉泡馍",
+        "category": 4,
+        "symbolSize": 25,
+        "itemStyle": {
+          "color": "#E8684A"
+        },
+        "value": "¥50"
+      },
+      {
+        "id": "meal_0_2_洒金桥小吃套餐",
+        "name": "晚餐: 洒金桥小吃套餐",
+        "category": 4,
+        "symbolSize": 25,
+        "itemStyle": {
+          "color": "#E8684A"
+        },
+        "value": "¥80"
+      },
+      {
+        "id": "day_1",
+        "name": "第2天",
+        "category": 1,
+        "symbolSize": 45,
+        "itemStyle": {
+          "color": "#5B8FF9"
+        },
+        "value": "2026-09-17"
+      },
+      {
+        "id": "attr_1_0_陕西历史博物馆",
+        "name": "陕西历史博物馆",
+        "category": 2,
+        "symbolSize": 35,
+        "itemStyle": {
+          "color": "#5AD8A6"
+        },
+        "value": "西安市雁塔区小寨东路91号 | 游览180分钟"
+      },
+      {
+        "id": "attr_1_1_大雁塔",
+        "name": "大雁塔",
+        "category": 2,
+        "symbolSize": 35,
+        "itemStyle": {
+          "color": "#5AD8A6"
+        },
+        "value": "西安市雁塔区慈恩西路大雁塔文化休闲景区内 | 游览60分钟 | 门票¥25"
+      },
+      {
+        "id": "attr_1_2_大唐不夜城",
+        "name": "大唐不夜城",
+        "category": 2,
+        "symbolSize": 35,
+        "itemStyle": {
+          "color": "#5AD8A6"
+        },
+        "value": "西安市雁塔区慈恩路46号 | 游览120分钟"
+      },
+      {
+        "id": "hotel_1_如家商旅酒店（西安大雁塔大唐不夜城店）",
+        "name": "如家商旅酒店（西安大雁塔大唐不夜城店）",
+        "category": 3,
+        "symbolSize": 35,
+        "itemStyle": {
+          "color": "#F6BD16"
+        },
+        "value": "300-380元 | ¥340/晚"
+      },
+      {
+        "id": "meal_1_0_牛肉胡辣汤+葱油饼",
+        "name": "早餐: 牛肉胡辣汤+葱油饼",
+        "category": 4,
+        "symbolSize": 25,
+        "itemStyle": {
+          "color": "#E8684A"
+        },
+        "value": "¥30"
+      },
+      {
+        "id": "meal_1_1_Biangbiang面",
+        "name": "午餐: Biangbiang面",
+        "category": 4,
+        "symbolSize": 25,
+        "itemStyle": {
+          "color": "#E8684A"
+        },
+        "value": "¥50"
+      },
+      {
+        "id": "meal_1_2_陕菜套餐",
+        "name": "晚餐: 陕菜套餐",
+        "category": 4,
+        "symbolSize": 25,
+        "itemStyle": {
+          "color": "#E8684A"
+        },
+        "value": "¥80"
+      },
+      {
+        "id": "day_2",
+        "name": "第3天",
+        "category": 1,
+        "symbolSize": 45,
+        "itemStyle": {
+          "color": "#5B8FF9"
+        },
+        "value": "2026-09-18"
+      },
+      {
+        "id": "attr_2_0_秦始皇帝陵博物院（兵马俑）",
+        "name": "秦始皇帝陵博物院（兵马俑）",
+        "category": 2,
+        "symbolSize": 35,
+        "itemStyle": {
+          "color": "#5AD8A6"
+        },
+        "value": "西安市临潼区秦陵北路 | 游览180分钟 | 门票¥120"
+      },
+      {
+        "id": "attr_2_1_华清宫",
+        "name": "华清宫",
+        "category": 2,
+        "symbolSize": 35,
+        "itemStyle": {
+          "color": "#5AD8A6"
+        },
+        "value": "西安市临潼区华清路38号 | 游览90分钟 | 门票¥120"
+      },
+      {
+        "id": "hotel_2_如家商旅酒店（西安大雁塔大唐不夜城店）",
+        "name": "如家商旅酒店（西安大雁塔大唐不夜城店）",
+        "category": 3,
+        "symbolSize": 35,
+        "itemStyle": {
+          "color": "#F6BD16"
+        },
+        "value": "300-380元"
+      },
+      {
+        "id": "meal_2_0_豆浆油条+茶叶蛋",
+        "name": "早餐: 豆浆油条+茶叶蛋",
+        "category": 4,
+        "symbolSize": 25,
+        "itemStyle": {
+          "color": "#E8684A"
+        },
+        "value": "¥30"
+      },
+      {
+        "id": "meal_2_1_临潼大盘鸡",
+        "name": "午餐: 临潼大盘鸡",
+        "category": 4,
+        "symbolSize": 25,
+        "itemStyle": {
+          "color": "#E8684A"
+        },
+        "value": "¥50"
+      },
+      {
+        "id": "meal_2_2_小南门夜市小吃",
+        "name": "晚餐: 小南门夜市小吃",
+        "category": 4,
+        "symbolSize": 25,
+        "itemStyle": {
+          "color": "#E8684A"
+        },
+        "value": "¥80"
+      },
+      {
+        "id": "weather_2026-09-16",
+        "name": "晴 23°C",
+        "category": 5,
+        "symbolSize": 28,
+        "itemStyle": {
+          "color": "#6DC8EC"
+        },
+        "value": "2026-09-16"
+      },
+      {
+        "id": "weather_2026-09-17",
+        "name": "晴 27°C",
+        "category": 5,
+        "symbolSize": 28,
+        "itemStyle": {
+          "color": "#6DC8EC"
+        },
+        "value": "2026-09-17"
+      },
+      {
+        "id": "weather_2026-09-18",
+        "name": "晴 28°C",
+        "category": 5,
+        "symbolSize": 28,
+        "itemStyle": {
+          "color": "#6DC8EC"
+        },
+        "value": "2026-09-18"
+      },
+      {
+        "id": "budget_total",
+        "name": "总预算 ¥1549",
+        "category": 6,
+        "symbolSize": 40,
+        "itemStyle": {
+          "color": "#FF9845"
+        },
+        "value": ""
+      },
+      {
+        "id": "budget_budget_attraction",
+        "name": "景点 ¥349",
+        "category": 6,
+        "symbolSize": 40,
+        "itemStyle": {
+          "color": "#FF9845"
+        },
+        "value": ""
+      },
+      {
+        "id": "budget_budget_hotel",
+        "name": "酒店 ¥660",
+        "category": 6,
+        "symbolSize": 40,
+        "itemStyle": {
+          "color": "#FF9845"
+        },
+        "value": ""
+      },
+      {
+        "id": "budget_budget_meal",
+        "name": "餐饮 ¥480",
+        "category": 6,
+        "symbolSize": 40,
+        "itemStyle": {
+          "color": "#FF9845"
+        },
+        "value": ""
+      },
+      {
+        "id": "budget_budget_transport",
+        "name": "交通 ¥60",
+        "category": 6,
+        "symbolSize": 40,
+        "itemStyle": {
+          "color": "#FF9845"
+        },
+        "value": ""
+      },
+      {
+        "id": "suggestion_overall",
+        "name": "1. 所有需要预约的景点（西安城墙、陕西历史博物馆、兵马俑）...",
+        "category": 7,
+        "symbolSize": 30,
+        "itemStyle": {
+          "color": "#B37FEB"
+        },
+        "value": "1. 所有需要预约的景点（西安城墙、陕西历史博物馆、兵马俑）务必提前按要求预约,避免耽误行程；2. 9月西安昼夜温差较大,建议携带薄外套；3. 临潼景点距离市区较远,建议早出发,预留充足时间；4. 品尝美食时选择本地人常去的街区,如洒金桥、小南门夜市,性价比更高；5. 市内出行优先选择地铁,便捷且避免拥堵；6. 参观兵马俑时建议租用官方讲解器,更好了解文物背景"
+      }
+    ],
+    "edges": [
+      {
+        "source": "city_西安",
+        "target": "day_0",
+        "label": "行程"
+      },
+      {
+        "source": "day_0",
+        "target": "attr_0_0_西安城墙",
+        "label": "游览"
+      },
+      {
+        "source": "day_0",
+        "target": "attr_0_1_钟楼",
+        "label": "游览"
+      },
+      {
+        "source": "attr_0_0_西安城墙",
+        "target": "attr_0_1_钟楼",
+        "label": "下一站"
+      },
+      {
+        "source": "day_0",
+        "target": "attr_0_2_回民街",
+        "label": "游览"
+      },
+      {
+        "source": "attr_0_1_钟楼",
+        "target": "attr_0_2_回民街",
+        "label": "下一站"
+      },
+      {
+        "source": "day_0",
+        "target": "hotel_0_如家酒店（西安钟楼回民街店）",
+        "label": "入住"
+      },
+      {
+        "source": "day_0",
+        "target": "meal_0_0_老潼关肉夹馍+豆浆",
+        "label": "早餐"
+      },
+      {
+        "source": "day_0",
+        "target": "meal_0_1_羊肉泡馍",
+        "label": "午餐"
+      },
+      {
+        "source": "day_0",
+        "target": "meal_0_2_洒金桥小吃套餐",
+        "label": "晚餐"
+      },
+      {
+        "source": "city_西安",
+        "target": "day_1",
+        "label": "行程"
+      },
+      {
+        "source": "day_1",
+        "target": "attr_1_0_陕西历史博物馆",
+        "label": "游览"
+      },
+      {
+        "source": "day_1",
+        "target": "attr_1_1_大雁塔",
+        "label": "游览"
+      },
+      {
+        "source": "attr_1_0_陕西历史博物馆",
+        "target": "attr_1_1_大雁塔",
+        "label": "下一站"
+      },
+      {
+        "source": "day_1",
+        "target": "attr_1_2_大唐不夜城",
+        "label": "游览"
+      },
+      {
+        "source": "attr_1_1_大雁塔",
+        "target": "attr_1_2_大唐不夜城",
+        "label": "下一站"
+      },
+      {
+        "source": "day_1",
+        "target": "hotel_1_如家商旅酒店（西安大雁塔大唐不夜城店）",
+        "label": "入住"
+      },
+      {
+        "source": "day_1",
+        "target": "meal_1_0_牛肉胡辣汤+葱油饼",
+        "label": "早餐"
+      },
+      {
+        "source": "day_1",
+        "target": "meal_1_1_Biangbiang面",
+        "label": "午餐"
+      },
+      {
+        "source": "day_1",
+        "target": "meal_1_2_陕菜套餐",
+        "label": "晚餐"
+      },
+      {
+        "source": "city_西安",
+        "target": "day_2",
+        "label": "行程"
+      },
+      {
+        "source": "day_2",
+        "target": "attr_2_0_秦始皇帝陵博物院（兵马俑）",
+        "label": "游览"
+      },
+      {
+        "source": "day_2",
+        "target": "attr_2_1_华清宫",
+        "label": "游览"
+      },
+      {
+        "source": "attr_2_0_秦始皇帝陵博物院（兵马俑）",
+        "target": "attr_2_1_华清宫",
+        "label": "下一站"
+      },
+      {
+        "source": "day_2",
+        "target": "hotel_2_如家商旅酒店（西安大雁塔大唐不夜城店）",
+        "label": "入住"
+      },
+      {
+        "source": "day_2",
+        "target": "meal_2_0_豆浆油条+茶叶蛋",
+        "label": "早餐"
+      },
+      {
+        "source": "day_2",
+        "target": "meal_2_1_临潼大盘鸡",
+        "label": "午餐"
+      },
+      {
+        "source": "day_2",
+        "target": "meal_2_2_小南门夜市小吃",
+        "label": "晚餐"
+      },
+      {
+        "source": "day_0",
+        "target": "weather_2026-09-16",
+        "label": "天气"
+      },
+      {
+        "source": "day_1",
+        "target": "weather_2026-09-17",
+        "label": "天气"
+      },
+      {
+        "source": "day_2",
+        "target": "weather_2026-09-18",
+        "label": "天气"
+      },
+      {
+        "source": "city_西安",
+        "target": "budget_total",
+        "label": "预算"
+      },
+      {
+        "source": "budget_total",
+        "target": "budget_budget_attraction",
+        "label": "景点"
+      },
+      {
+        "source": "budget_total",
+        "target": "budget_budget_hotel",
+        "label": "酒店"
+      },
+      {
+        "source": "budget_total",
+        "target": "budget_budget_meal",
+        "label": "餐饮"
+      },
+      {
+        "source": "budget_total",
+        "target": "budget_budget_transport",
+        "label": "交通"
+      },
+      {
+        "source": "city_西安",
+        "target": "suggestion_overall",
+        "label": "建议"
+      }
+    ],
+    "categories": [
+      {
+        "name": "城市"
+      },
+      {
+        "name": "日程"
+      },
+      {
+        "name": "景点"
+      },
+      {
+        "name": "酒店"
+      },
+      {
+        "name": "餐饮"
+      },
+      {
+        "name": "天气"
+      },
+      {
+        "name": "预算"
+      },
+      {
+        "name": "偏好/建议"
+      }
+    ]
+  }
+}
