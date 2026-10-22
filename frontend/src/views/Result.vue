@@ -4140,8 +4140,13 @@ const drawRoutes = async (AMap: any, attractions: any[]): Promise<any[]> => {
 }
 
 /* 地图卡片 */
+/* 注意：这里必须给 .map-card 一个确定高度。
+   之前是 height:100% + min-height:500px，百分比高度无法从 min-height 解析，
+   导致 .ant-card-body 高度为 auto、#amap-container 实际高度 0，
+   AMap 2.0 在 0 高度容器上 add() overlay 会抛 `Invalid Object: Pixel(NaN, NaN)`，
+   表现为"只剩底图、景点标记全部丢失"。 */
 .map-card {
-  height: 100%;
+  height: 500px;
   min-height: 500px;
   overflow: hidden;
 }
